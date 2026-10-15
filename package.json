@@ -1,0 +1,25 @@
+{
+  "name": "anti-calo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node --test tests/*.test.js",
+    "sync-docs": "node scripts/sync-docs.mjs",
+    "predev": "npm run sync-docs",
+    "pretest": "npm run sync-docs",
+    "prebuild": "npm run sync-docs"
+  },
+  "dependencies": {
+    "ethers": "6.17.0",
+    "qrcode": "1.5.4",
+    "jsqr": "1.4.0"
+  },
+  "devDependencies": {
+    "vite": "7.3.7",
+    "jsdom": "26.1.0"
+  }
+}
