@@ -8,7 +8,7 @@ import { seedState } from '../src/model.js';
 import { DEMO_STORAGE_KEY } from '../src/store.js';
 let dom,count=0;
 const source=await readFile(new URL('../src/main.js',import.meta.url),'utf8');
-const testSource=source.replace("import './styles.css';",'').replace("import QRCode from 'qrcode';",'const QRCode={toCanvas:async(canvas,payload)=>{canvas.dataset.encodedPayload=payload;}};').replace(/from '\.\/(.+?)'/g,(_,p)=>`from '${pathToFileURL(resolve('src',p)).href}'`).replace("import('jsqr')", `import('${import.meta.resolve('jsqr')}')`);
+const testSource=source.replace(/import ["']\.\/styles\.css["'];?/,'').replace(/import QRCode from ["']qrcode["'];?/,'const QRCode={toCanvas:async(canvas,payload)=>{canvas.dataset.encodedPayload=payload;}};').replace(/from ["']\.\/(.+?)["']/g,(_,p)=>`from '${pathToFileURL(resolve('src',p)).href}'`).replace(/import\(["']jsqr["']\)/,`import('${import.meta.resolve('jsqr')}')`).replace(/import\.meta\.env\.BASE_URL/g,"'/'");
 async function mount(page,{state=seedState(),session='buyer',ethereum}={}){
  if(dom){dom.window.document.querySelector('dialog')?.close();dom.window.close();}
  const html=await readFile(resolve(`${page}.html`),'utf8');dom=new JSDOM(html,{url:`https://example.test/${page}.html`,pretendToBeVisual:true});
