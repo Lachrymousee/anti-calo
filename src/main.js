@@ -25,6 +25,21 @@ import {
   parseEth,
 } from "./model.js";
 import { connectInjectedWallet, switchToSepolia } from "./chain.js";
+import {
+  isLiveMode,
+  configuredContract,
+  setConfiguredContract,
+  configuredMarketplaceContract,
+  setMarketplaceContract,
+  buyTicketTx,
+  listResaleTx,
+  cancelResaleTx,
+  buyResaleTx,
+  purchaseAllowance,
+  withdrawProceedsTx,
+} from "./contract.js";
+import { runTransactionWithModal } from "./tx.js";
+import { loginWithWallet, loadSession, logout, isLoggedIn } from "./auth.js";
 import { createIntegrationPage } from "./integration.js";
 import { createDocsPage } from "./docs.js";
 import {
@@ -54,6 +69,9 @@ let connectedWallet = null,
   cleanupPage = () => {},
   gateSelected = null,
   integrationDraft = null;
+// Sesi login SIWE (null jika belum login). Mode live = kontrak dikonfigurasi.
+let authSession = loadSession();
+const liveMode = () => isLiveMode();
 let category = "Semua",
   market = "primary",
   query = "",
@@ -228,6 +246,70 @@ async function connectWallet() {
     );
   }
 }
+// --- Login wallet (SIWE) ----------------------------------------------------
+async function doLogin() {
+  try {
+    authSession = await loginWithWallet();
+    connectedWallet = {
+      address: authSession.address,
+      chainId: authSession.chainId,
+    };
+    document.getElementById("modal").close();
+    render();
+    toast("Login berhasil. Wallet kamu terhubung.", "success");
+  } catch (err) {
+    toast(
+      err.code === 4001 || err.code === "ACTION_REJECTED"
+        ? "Permintaan tanda tangan dibatalkan."
+        : err.message,
+      "error",
+    );
+  }
+}
+function doLogout() {
+  logout();
+  authSession = null;
+  render();
+  toast("Kamu sudah keluar dari sesi wallet.");
+}
+function loginDialog() {
+  openModal(
+    "Login dengan wallet",
+    el(
+      "div",
+      { class: "login-dialog" },
+      el("div", { class: "large-symbol" }, icon("wallet", 32)),
+      el(
+        "p",
+        {},
+        "Masuk ke anti-calo dengan menandatangani pesan login (SIWE). Gratis, tanpa mengirim transaksi atau ETH.",
+      ),
+      el(
+        "div",
+        { class: "notice" },
+        icon("info"),
+        el(
+          "span",
+          {},
+          "Tanda tangan membuktikan kamu pemilik wallet. Verifikasi penuh dilakukan server saat backend tersedia.",
+        ),
+      ),
+      button("Tanda tangani & masuk", doLogin, {
+        kind: "primary",
+        iconName: "wallet",
+        class: "btn btn-primary full",
+        "data-testid": "siwe-login",
+      }),
+      liveMode()
+        ? null
+        : el(
+            "p",
+            { class: "field-hint" },
+            "Mode demo aktif. Kamu juga bisa mencoba alur dengan akun demo tanpa wallet.",
+          ),
+    ),
+  );
+}
 function header() {
   const a = account();
   return el(
@@ -253,17 +335,40 @@ function header() {
       el(
         "div",
         { class: "header-actions" },
-        button(
-          connectedWallet
-            ? shortAddress(connectedWallet.address)
-            : "Hubungkan wallet",
-          connectWallet,
-          {
-            kind: "wallet",
-            iconName: "wallet",
-            "data-testid": "connect-wallet",
-          },
-        ),
+        authSession
+          ? button(
+              el(
+                "span",
+                { class: "logged-in-wallet" },
+                el("span", { class: "status-dot" }),
+                shortAddress(authSession.address),
+              ),
+              doLogout,
+              {
+                kind: "wallet",
+                iconName: "logout",
+                title: "Keluar dari sesi wallet",
+                "data-testid": "logout",
+              },
+            )
+          : button("Login wallet", loginDialog, {
+              kind: "wallet",
+              iconName: "wallet",
+              "data-testid": "login-wallet",
+            }),
+        !authSession && !liveMode()
+          ? button(
+              connectedWallet
+                ? shortAddress(connectedWallet.address)
+                : "Hubungkan wallet",
+              connectWallet,
+              {
+                kind: "wallet",
+                iconName: "wallet",
+                "data-testid": "connect-wallet",
+              },
+            )
+          : null,
         button(
           el(
             "span",
@@ -999,7 +1104,14 @@ function confirmPurchase(eventId, resaleId) {
           el("span", {}, "Harga tiket"),
           el("strong", {}, money(t?.resalePrice ?? e.price)),
         ),
-        el("div", {}, el("span", {}, "Pembayaran"), badge("Simulasi", "amber")),
+        el(
+          "div",
+          {},
+          el("span", {}, "Pembayaran"),
+          liveMode()
+            ? badge("On-chain Sepolia", "green")
+            : badge("Simulasi", "amber"),
+        ),
       ),
       el(
         "div",
@@ -1008,37 +1120,14 @@ function confirmPurchase(eventId, resaleId) {
         el(
           "span",
           {},
-          "Ini transaksi demo. Tidak ada biaya, permintaan tanda tangan, atau ETH yang dikirim.",
+          liveMode()
+            ? "Pembelian nyata di Sepolia. Wallet akan meminta persetujuan dan mengirim ETH sebesar harga tiket plus biaya jaringan."
+            : "Ini transaksi demo. Tidak ada biaya, permintaan tanda tangan, atau ETH yang dikirim.",
         ),
       ),
       button(
-        "Konfirmasi pembelian demo",
-        () => {
-          const ticket = commit((s) =>
-            resaleId
-              ? buyResale(s, account().address, resaleId)
-              : purchase(s, account().address, eventId),
-          );
-          openModal(
-            "Tiket sudah di tanganmu!",
-            el(
-              "div",
-              { class: "success-content" },
-              el("span", { class: "success-symbol" }, icon("check", 36)),
-              el("h3", {}, "Sampai bertemu di event."),
-              el(
-                "p",
-                {},
-                `Tiket #${ticket.id} untuk ${e.title} sekarang tersedia di akun ${account().name}.`,
-              ),
-              link("Lihat tiket saya", "tickets.html", {
-                kind: "primary",
-                iconName: "ticket",
-                "data-testid": "go-to-tickets",
-              }),
-            ),
-          );
-        },
+        liveMode() ? "Konfirmasi & bayar dengan wallet" : "Konfirmasi pembelian demo",
+        () => (liveMode() ? onchainPurchase(e, t) : demoPurchase(e, t)),
         {
           kind: "primary",
           "data-testid": "confirm-purchase",
@@ -1047,6 +1136,107 @@ function confirmPurchase(eventId, resaleId) {
       ),
     ),
   );
+}
+function purchaseSuccessView(e, ticket) {
+  return () =>
+    el(
+      "div",
+      { class: "success-content" },
+      el("span", { class: "success-symbol" }, icon("check", 36)),
+      el("h3", {}, "Sampai bertemu di event."),
+      el(
+        "p",
+        {},
+        liveMode()
+          ? `Tiket untuk ${e.title} berhasil dibeli on-chain. NFT sudah masuk ke wallet kamu.`
+          : `Tiket #${ticket.id} untuk ${e.title} sekarang tersedia di akun ${account().name}.`,
+      ),
+      link("Lihat tiket saya", "tickets.html", {
+        kind: "primary",
+        iconName: "ticket",
+        "data-testid": "go-to-tickets",
+      }),
+    );
+}
+function demoPurchase(e, t) {
+  const ticket = commit((s) =>
+    t ? buyResale(s, account().address, t.id) : purchase(s, account().address, e.id),
+  );
+  openModal("Tiket sudah di tanganmu!", purchaseSuccessView(e, ticket)());
+}
+async function onchainPurchase(e, t) {
+  if (!authSession) {
+    toast("Login dengan wallet terlebih dahulu untuk membeli on-chain.", "error");
+    loginDialog();
+    return;
+  }
+  const nftAddress = configuredContract();
+  const marketAddress = configuredMarketplaceContract();
+  const wallet = authSession.address;
+  try {
+    // Cek batas beli per wallet (aturan anti-calo) untuk pembelian primer.
+    if (!t) {
+      const allowance = await purchaseAllowance({
+        nftAddress,
+        eventId: e.id,
+        wallet,
+      });
+      if (!allowance.allowed) {
+        toast(
+          `Batas pembelian tercapai: ${allowance.used}/${allowance.max} tiket untuk event ini.`,
+          "error",
+        );
+        return;
+      }
+    }
+    await runTransactionWithModal(
+      () =>
+        t
+          ? buyResaleTx({ marketAddress, tokenId: t.id, priceEth: t.resalePrice })
+          : buyTicketTx({ nftAddress, eventId: e.id, priceEth: e.price }),
+      {
+        openModal,
+        title: t ? "Membeli tiket resale" : "Membeli tiket",
+        successView: purchaseSuccessView(e, null),
+      },
+    );
+  } catch {
+    /* status gagal sudah ditampilkan di modal */
+  }
+}
+async function cancelListing(t) {
+  if (liveMode()) {
+    if (!authSession) {
+      loginDialog();
+      return;
+    }
+    try {
+      await runTransactionWithModal(
+        () => cancelResaleTx({ marketAddress: configuredMarketplaceContract(), tokenId: t.id }),
+        {
+          openModal,
+          title: "Membatalkan listing resale",
+          successView: () =>
+            el(
+              "div",
+              { class: "success-content" },
+              el("span", { class: "success-symbol" }, icon("check", 36)),
+              el("h3", {}, "Listing dibatalkan."),
+              el("p", {}, "Tiket kembali aktif di wallet kamu."),
+              button("Tutup", () => render(), { kind: "primary" }),
+            ),
+        },
+      );
+    } catch {
+      /* gagal sudah tampil di modal */
+    }
+    return;
+  }
+  commit(
+    (s) => withdrawResale(s, account().address, t.id),
+    "Penawaran dibatalkan. Tiket kembali aktif.",
+  );
+  render();
 }
 function ticketsPage() {
   const a = account(),
@@ -1183,14 +1373,8 @@ function ticketCard(t) {
                 badge(`Ditawarkan ${money(t.resalePrice)}`, "amber"),
                 button(
                   "Batalkan penawaran",
-                  () => {
-                    commit(
-                      (s) => withdrawResale(s, account().address, t.id),
-                      "Penawaran dibatalkan. Tiket kembali aktif.",
-                    );
-                    render();
-                  },
-                  { kind: "outline" },
+                  () => cancelListing(t),
+                  { kind: "outline", "data-testid": `cancel-listing-${t.id}` },
                 ),
               ]
             : el(
@@ -1327,8 +1511,46 @@ function resaleModal(id) {
   const form = el(
     "form",
     {
-      onsubmit: (ev) => {
+      onsubmit: async (ev) => {
         ev.preventDefault();
+        error.textContent = "";
+        if (liveMode()) {
+          if (!authSession) {
+            loginDialog();
+            return;
+          }
+          try {
+            await runTransactionWithModal(
+              () =>
+                listResaleTx({
+                  marketAddress: configuredMarketplaceContract(),
+                  tokenId: id,
+                  priceEth: input.value,
+                  capEth: t.facePrice ?? t.originalPrice,
+                }),
+              {
+                openModal,
+                title: "Membuat listing resale",
+                successView: () =>
+                  el(
+                    "div",
+                    { class: "success-content" },
+                    el("span", { class: "success-symbol" }, icon("check", 36)),
+                    el("h3", {}, "Tiket ditawarkan."),
+                    el(
+                      "p",
+                      {},
+                      "Listing resale dibuat on-chain. Pembeli lain kini dapat membelinya.",
+                    ),
+                    button("Tutup", () => render(), { kind: "primary" }),
+                  ),
+              },
+            );
+          } catch {
+            /* gagal sudah tampil di modal */
+          }
+          return;
+        }
         try {
           commit(
             (s) => listResale(s, account().address, id, input.value),
