@@ -1,48 +1,42 @@
-# Tasks: TicketNFT Contract
+# Tasks: Marketplace Contract (Member 2)
 
-Status: CONFIRMED (25 Oct 2026).
+Spec-level checklist. The step-by-step working guide with commands, test IDs and acceptance criteria is `docs/TODO-marketplace.md`.
+Legend: `[x]` done, `[ ]` to do. Requirement references point to `requirements.md`.
 
-- [x] 1. Set up `blockchain/` Hardhat project
-  - `package.json` with exact pins (OZ 5.6.1, Hardhat + toolbox per OD-15), own lockfile
-  - `hardhat.config.js` (solc 0.8.28, optimizer 200), `blockchain/.gitignore`
-  - _Requirements: 7.1_
+## Provided with the spec
 
-- [x] 2. Write `contracts/ITicketNFT.sol`
-  - Enums, structs, marketplace hooks, `getTicket`, `getEvent`
-  - _Requirements: 6.3–6.6_
+- [x] `.kiro/specs/marketplace/requirements.md`, `design.md`, `tasks.md`
+- [x] `blockchain/contracts/IMarketplace.sol` (struct, events, errors, function signatures) (R8, R9)
+- [x] `blockchain/scripts/export-abi.js` exports `TicketNFT` and `Marketplace` (R9.5)
+- [x] `docs/contracts-marketplace.md` (integration doc, to be completed with real test and Slither results) (R9.6)
+- [x] `docs/TODO-marketplace.md` (working guide)
 
-- [x] 3. Write `contracts/TicketNFT.sol`
-  - [x] 3.1 Roles, constants, storage, errors, events, constructor, `supportsInterface`
-  - [x] 3.2 Event CRUD + `_validate` + locked fields after sales (Req 2)
-  - [x] 3.3 `buyTicket`, `getTicket`, `purchasedCount` (Req 3)
-  - [x] 3.4 Gate checker assign/remove, `checkIn`, `revokeTicket` (Req 4)
-  - [x] 3.5 `withdraw`, `claimRefund`, `eventBalances` (Req 5)
-  - [x] 3.6 `_update` lock, approvals disabled, marketplace hooks, views (Req 6)
-  - [x] 3.7 NatSpec on every public item, timestamp and rounding notes (Req 7.2, 7.4)
-  - Verify: `npx hardhat compile` and compile once in Remix
+## Implementation
 
-- [x] 4. Test helpers in `contracts/test/`: `RefundAttacker.sol`, `WithdrawAttacker.sol`
+- [x] 1. Baseline: `npm ci`, existing tests green (R9.7)
+- [x] 2. `Marketplace.sol` skeleton: `is IMarketplace, ReentrancyGuard`, constants, immutables, storage, constructor (R1)
+- [x] 3. `listTicket` with the check order of design §4.1 (R2)
+- [x] 4. `cancelListing` without external calls (R3)
+- [x] 5. `quoteSale`, `getListing`, `pendingProceeds` (R6)
+- [x] 6. `buyListing` with the order of design §4.3, CEI, `nonReentrant` (R4, R7)
+- [x] 7. `withdrawProceeds` with zero-before-send, `nonReentrant` (R5)
+- [x] 8. NatSpec on every external function, including rounding and kill-switch notes (R9.2)
+- [x] 9. No `receive`/`fallback`, no owner or setters (R1.2, R1.4)
 
-- [x] 5. Write `test/TicketNFT.test.js`
-  - [x] 5.1 Roles: non-admin cannot grant; non-organizer cannot create; organizer B cannot update/cancel organizer A's event; Admin cannot update
-  - [x] 5.2 Event CRUD: create/get/update/cancel happy paths, invalid params, update after cancel rejected
-  - [x] 5.3 Locked fields after first sale (price, maxSupply, resaleCapBps, earlier eventTime); non-financial fields still editable
-  - [x] 5.4 Buy limits: maxPerWallet, supply, wrong payment (under/over), before saleStart, at/after saleEnd, qty 0, canceled event
-  - [x] 5.5 Per-event gate checker: assign/remove by organizer and Admin, by others rejected; checker of event A cannot check in event B ticket
-  - [x] 5.6 Check-in: success, second check-in rejected, revoked ticket rejected, canceled event rejected
-  - [x] 5.7 Transfers: `transferFrom`/`safeTransferFrom` blocked, `approve`/`setApprovalForAll` revert, marketplace transfer allowed, marketplace transfer of Used/Revoked/canceled/post-event ticket rejected, non-marketplace caller rejected
-  - [x] 5.8 Views: `getResaleCap` rounding, `isTransferable` all branches
-  - [x] 5.9 Money: withdraw before eventTime rejected, after succeeds once, non-organizer rejected, canceled event pays fees only; cancel + refund (Valid and Used), double refund rejected, revoke + refund
-  - [x] 5.10 Reentrancy on `claimRefund` and `withdraw` fails, paid exactly once
-  - [x] 5.11 Resale fee: marketplace only, credited to the right event
-  - Verify: `npx hardhat test` all green, `npx hardhat coverage`
+## Testing
 
-- [x] 6. `scripts/export-abi.js` → `shared/abi/TicketNFT.json`; run it
-  - _Requirements: 7.6_
+- [x] 10. `contracts/test/ProceedsAttacker.sol` (reentrancy and rejecting-seller helper) (R5.3, R9.4)
+- [x] 11. Fixture: TicketNFT + Marketplace(feeBps 500), role granted, `rogue` role holder, event with `resaleCapBps = 11000`
+- [x] 12. Test groups A to H from design §10 (R1 to R8)
+- [x] 13. Money invariant asserted after mixed sequences (design §6, R7.4)
+- [x] 14. Coverage: 100% lines and branches of `Marketplace.sol` (R9.3)
+- [x] 15. Existing `TicketNFT.test.js` untouched and green (R9.7)
 
-- [x] 7. `docs/contracts.md` (Indonesian): function table, events, errors, Remix tuple example, integration notes for Members 2–6
-  - _Requirements: 7.7_
+## Quality, integration, delivery
 
-- [x] 8. Audit handoff: known risks/assumptions list and Slither command (in `docs/contracts.md`); run Slither if installed and record real output only
-  - _Requirements: 7.8_
-  - Note: Slither is not installed on this machine, so it has not been run yet.
+- [x] 16. Slither run, findings triaged and recorded in the integration doc (R9.6)
+- [x] 17. `npm run export-abi` produces `shared/abi/Marketplace.json` (R9.5)
+- [x] 18. Complete `docs/contracts-marketplace.md` with real test counts and Slither result (R9.6)
+- [x] 19. Hand-off note for frontend/backend/indexer: purchasable-listing rule, `quoteSale`, per-event cap, merged-ABI error decoding (design §5, §8)
+- [ ] 20. Deployment hand-off: deploy with `feeBps = 500`, Admin grants `MARKETPLACE_ROLE`, record address in `shared/deployments/<network>.json` (R1.3)
+- [ ] 21. Pull request from `feature/marketplace`, review checklist passed
