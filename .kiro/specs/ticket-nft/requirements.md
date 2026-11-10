@@ -1,119 +1,102 @@
-# Requirements: Marketplace Contract (Member 2)
+# Requirements: TicketNFT Contract (Member 1)
 
-**Status:** CONFIRMED (2 Nov 2026). Items tagged `[OD-Mn]` follow the accepted decisions in `design.md` §11.
-**Companion of:** `.kiro/specs/ticket-nft/` (TicketNFT is CONFIRMED and is **not modified** by this spec).
+Status: CONFIRMED (25 Oct 2026). Items tagged `[OD-n]` follow the accepted defaults in `design.md` §11.
 
 ## Introduction
 
-`Marketplace` is the resale contract of the anti-calo dApp. It lets a ticket holder list a `TicketNFT` ticket at a price that does not exceed the event's resale cap, lets another wallet buy it, pays the organizer a resale fee, and lets the seller withdraw the proceeds.
+`TicketNFT` is the core contract of the anti-calo dApp. It stores the core event data, mints ERC-721 tickets on primary sale, restricts transfers to the marketplace contract (Member 2), handles check-in by per-event Gate Checkers, and holds sale money in escrow using pull payments. Event descriptions, posters and profiles live off-chain (Members 3/6), keyed by `eventId`.
 
-`TicketNFT` disables `approve` and `transferFrom`. The only way a ticket changes hands after the primary sale is `TicketNFT.transferByMarketplace`, which only an address holding `MARKETPLACE_ROLE` can call. `TicketNFT` does **not** verify seller consent, price, or listing state, so all of that is the responsibility of this contract.
-
-**In scope:** `blockchain/contracts/Marketplace.sol`, `blockchain/contracts/IMarketplace.sol`, `blockchain/contracts/test/ProceedsAttacker.sol`, `blockchain/test/Marketplace.test.js`, ABI export, `docs/contracts-marketplace.md`.
-
-**Out of scope:** any change to TicketNFT, deployment scripts and `shared/deployments/`, indexer, backend, frontend, ERC-20 payments, auctions, offers/bids, on-chain listing enumeration.
+Scope: `blockchain/contracts/TicketNFT.sol`, `blockchain/contracts/ITicketNFT.sol`, tests, ABI export, `docs/contracts.md`. Out of scope: marketplace listing logic, deployment scripts, SIWE, backend, indexer, frontend.
 
 ## Glossary
 
-| Term | Meaning |
-|---|---|
-| Seller | Address that created a listing and currently holds the ticket |
-| Buyer | Address that pays for a listing and receives the ticket |
-| Listing | Record `{seller, price}` stored per `tokenId` |
-| Cap | `TicketNFT.getResaleCap(tokenId)` in wei (`originalPrice * resaleCapBps / 10_000`) |
-| Fee | `price * feeBps / 10_000` (rounded down), paid to the event organizer through `TicketNFT.receiveResaleFee` |
-| Proceeds | `price - fee`, credited to the seller in `pendingProceeds` |
-| Transferable | `TicketNFT.isTransferable(tokenId)` is true (ticket exists, `Valid`, event `Active`, event not started) |
-| Stale listing | A listing whose `seller` is no longer `ownerOf(tokenId)` |
+- Admin: holder of `DEFAULT_ADMIN_ROLE`.
+- Organizer: holder of `ORGANIZER_ROLE`. "Event organizer" means the address stored in `EventInfo.organizer`.
+- Gate Checker: address assigned to a specific event in `_gateCheckers[eventId]`.
+- Marketplace: contract holding `MARKETPLACE_ROLE`.
+- Holder: current `ownerOf(tokenId)`.
+- bps: basis points, 10000 = 100%.
 
-## Requirements
+## Requirement 1: Roles and access control
 
-### R1. Configuration and trust model
+User story: As the Admin, I want to control who can organize events and which contract is the marketplace, so that only trusted parties can create events or move tickets.
 
-1. THE constructor `(address ticketNft_, uint16 feeBps_)` SHALL revert with `ZeroAddress` if `ticketNft_ == address(0)` and with `InvalidFee` if `feeBps_ > MAX_FEE_BPS`. `MAX_FEE_BPS` SHALL be `1000` (10%). Both values SHALL be stored as `immutable`. [OD-M3]
-2. THE contract SHALL have no owner, admin, pause switch, upgrade path, or fee/address setter. [OD-M12]
-3. THE contract SHALL be able to move tickets only after the TicketNFT `DEFAULT_ADMIN_ROLE` holder grants it `MARKETPLACE_ROLE`. THE contract SHALL NOT grant or change roles itself.
-4. THE contract SHALL NOT define `receive` or `fallback`; ETH sent without calling a payable function SHALL revert.
+1. The contract SHALL grant `DEFAULT_ADMIN_ROLE` to a non-zero `admin` address passed to the constructor.
+2. WHEN the Admin calls `grantRole`/`revokeRole` for `ORGANIZER_ROLE` or `MARKETPLACE_ROLE`, THE contract SHALL update the role and emit the OpenZeppelin `RoleGranted`/`RoleRevoked` event.
+3. IF a non-Admin calls `grantRole`/`revokeRole`, THEN the contract SHALL revert.
+4. Every state-changing external function SHALL enforce an explicit caller check, listed in `docs/contracts.md`.
+5. The contract SHALL NOT use `tx.origin` for authorization.
 
-### R2. Listing
+## Requirement 2: Event CRUD (on-chain)
 
-1. WHEN `listTicket(tokenId, price)` is called, THE contract SHALL store `Listing{msg.sender, price}` and emit `Listed(tokenId, eventId, seller, price)` only if all hold, checked in this order:
-   1. `price > 0`, otherwise `ZeroPrice`.
-   2. `isTransferable(tokenId)`, otherwise `TicketNotTransferable(tokenId)`.
-   3. `ownerOf(tokenId) == msg.sender`, otherwise `NotTicketHolder(tokenId, msg.sender)`.
-   4. `price <= getResaleCap(tokenId)`, otherwise `PriceAboveCap(tokenId, price, cap)`.
-   5. the existing listing for `tokenId` (if any) was not created by `msg.sender`, otherwise `AlreadyListed(tokenId)`. [OD-M7]
-2. THE check order SHALL ensure a burned or non-existent token yields `TicketNotTransferable`, never an `ERC721NonexistentToken` revert from `ownerOf`.
-3. ANY ticket holder (Attendee, Organizer, Gate Checker, Admin) MAY list a ticket they own. [OD-M7]
-4. THE contract SHALL NOT move, lock, or require approval for the NFT when listing. [OD-M7]
-5. A stale listing created by another address SHALL be overwritten by a valid new listing from the current holder.
-6. THERE SHALL be at most one listing per `tokenId`; changing the price requires `cancelListing` then `listTicket`. [OD-M7]
+User story: As an Organizer, I want to create, view, update and cancel my events on-chain, so that the core sale rules are public and tamper-resistant.
 
-### R3. Cancel
+1. WHEN an Organizer calls `createEvent` with valid parameters, THE contract SHALL store a new `EventInfo` with `organizer = msg.sender`, `sold = 0`, `status = Active`, assign the next sequential `eventId` (starting at 1), and emit `EventCreated`.
+2. IF `createEvent` parameters are invalid (see design §4.1), THEN the contract SHALL revert with a specific custom error.
+3. WHEN anyone calls `getEvent(eventId)` for an existing event, THE contract SHALL return the full `EventInfo`. IF the event does not exist, THEN it SHALL revert `EventNotFound`.
+4. WHEN the event organizer calls `updateEvent` on an Active event before `eventTime`, THE contract SHALL apply the new values and emit `EventUpdated`.
+5. IF anyone other than the event organizer calls `updateEvent` (including other Organizers and the Admin), THEN the contract SHALL revert `NotEventOrganizer`.
+6. WHILE `sold > 0`, IF `updateEvent` changes `ticketPrice`, `maxSupply` or `resaleCapBps`, THEN the contract SHALL revert `FieldLocked`.
+7. WHILE `sold > 0`, IF `updateEvent` sets an `eventTime` earlier than the current one, THEN the contract SHALL revert `FieldLocked`. [OD-10]
+8. WHEN the event organizer or Admin calls `cancelEvent` on an Active event before `eventTime`, THE contract SHALL set `status = Canceled` (soft delete, data stays readable) and emit `EventCanceled`. [OD-5]
+9. A Canceled event SHALL NOT be updated, re-activated, sold, or checked in.
 
-1. WHEN `cancelListing(tokenId)` is called by the listing's seller, THE contract SHALL delete the listing and emit `ListingCanceled(tokenId, seller)`.
-2. IF no listing exists THEN `NotListed(tokenId)`; IF the caller is not the seller THEN `NotSeller(tokenId, caller)`.
-3. `cancelListing` SHALL NOT call TicketNFT, so it works for used, revoked, refunded (burned), cancelled-event, ended-event tickets and after `MARKETPLACE_ROLE` is revoked. [OD-M8, OD-M12]
-4. NO other party (including Organizer and Admin) SHALL be able to cancel someone else's listing.
+## Requirement 3: Primary sale
 
-### R4. Buy
+User story: As a Buyer, I want to buy tickets directly from the organizer at the fixed price, so that I get a valid NFT ticket without scalper markup.
 
-1. WHEN `buyListing(tokenId)` is called with ETH, THE contract SHALL perform these checks in order, reverting with the stated error:
-   1. listing exists, else `NotListed(tokenId)`.
-   2. `msg.sender != seller`, else `CannotBuyOwnListing`.
-   3. `msg.value == price`, else `IncorrectPayment(price, msg.value)`.
-   4. `isTransferable(tokenId)`, else `TicketNotTransferable(tokenId)`.
-   5. `ownerOf(tokenId) == seller`, else `StaleListing(tokenId)`. [OD-M9]
-2. ON success THE contract SHALL, in this order (checks-effects-interactions):
-   1. compute `fee = price * feeBps / 10_000` rounded down; [OD-M1, OD-M2]
-   2. add `price - fee` to `pendingProceeds[seller]`;
-   3. delete the listing;
-   4. call `TicketNFT.transferByMarketplace(seller, msg.sender, tokenId)`;
-   5. IF `fee > 0` THEN call `TicketNFT.receiveResaleFee{value: fee}(eventId)`; [OD-M5]
-   6. emit `Sold(tokenId, eventId, buyer, seller, price, fee)`.
-3. THE buyer SHALL pay exactly `price`; the fee is taken from `price`, so the buyer never pays above the cap. [OD-M1]
-4. THE fee SHALL go only to the organizer's resale-fee balance of the ticket's event inside TicketNFT. There SHALL be no platform fee. [OD-M2]
-5. THE operation SHALL be atomic: any revert from TicketNFT (for example a missing `MARKETPLACE_ROLE`) reverts the whole purchase, leaving listing and balances unchanged.
-6. `buyListing` SHALL be `nonReentrant`.
-7. Resale purchases SHALL NOT be limited per wallet by this contract. [OD-M10]
-8. AFTER a sale THE new owner MAY list the ticket again; the cap stays based on the original ticket price.
-9. THE listing-time cap check is sufficient: after the first sale `price`, `maxSupply`, and `resaleCapBps` of an event are locked in TicketNFT, so the cap of an existing ticket cannot change. THE contract SHALL NOT repeat the cap check in `buyListing`.
+1. WHEN a Buyer calls `buyTicket(eventId, qty)` with `msg.value == ticketPrice * qty` inside the sale window, THE contract SHALL mint `qty` sequential tokens to the Buyer, store `TicketInfo{eventId, Valid, ticketPrice}` per token, increase `sold` and the Buyer's purchase count, credit the event escrow, and emit `TicketPurchased`.
+2. IF `block.timestamp < saleStart` or `block.timestamp >= saleEnd`, THEN revert `SaleNotOpen`.
+3. IF `sold + qty > maxSupply`, THEN revert `SoldOut`.
+4. IF the Buyer's purchased count for the event plus `qty` exceeds `maxPerWallet`, THEN revert `WalletLimitExceeded`. Only primary purchases are counted. [OD-9]
+5. IF `msg.value != ticketPrice * qty`, THEN revert `IncorrectPayment` (no overpayment kept, no change returned).
+6. IF `qty == 0` or the event is not Active, THEN revert with the matching error.
+7. The number of loop iterations in `buyTicket` SHALL be bounded by the constant `MAX_PER_WALLET`.
 
-### R5. Proceeds withdrawal
+## Requirement 4: Ticket view, check-in and revoke
 
-1. WHEN `withdrawProceeds()` is called, THE contract SHALL read `pendingProceeds[msg.sender]`, revert `NoProceeds` if zero, set it to zero **before** sending, send the amount to `msg.sender` with a low-level call, revert `EthTransferFailed` on failure, and emit `ProceedsWithdrawn(seller, amount)`. [OD-M4]
-2. `withdrawProceeds` SHALL be `nonReentrant`.
-3. A seller that cannot receive ETH SHALL NOT be able to block any purchase; only its own withdrawal fails and its balance is preserved.
-4. THE contract SHALL send ETH only in `withdrawProceeds` (to the caller) and in `buyListing` (the fee, to the fixed `ticketNft` address).
-5. `withdrawProceeds` SHALL work regardless of whether the contract still holds `MARKETPLACE_ROLE`. [OD-M12]
+User story: As a Gate Checker, I want to mark a ticket as used exactly once, so that one ticket admits one person to the right event.
 
-### R6. Views
+1. WHEN anyone calls `getTicket(tokenId)` for a minted token (including burned ones), THE contract SHALL return `TicketInfo`. IF never minted, THEN revert `TicketNotFound`.
+2. WHEN an event organizer or Admin calls `assignGateChecker(eventId, addr)` / `removeGateChecker(eventId, addr)`, THE contract SHALL update the per-event mapping and emit `GateCheckerAssigned` / `GateCheckerRemoved`. [OD-1]
+3. WHEN an assigned Gate Checker of the ticket's event calls `checkIn` for a Valid ticket of an Active event, THE contract SHALL set `status = Used` and emit `TicketCheckedIn`.
+4. The function signature SHALL be `checkIn(eventId, tokenId)`. IF the ticket belongs to another event, THEN revert `WrongEvent`. IF the caller is not assigned to `eventId`, THEN revert `NotGateChecker`. A checker of event A SHALL NOT check in a ticket of event B. [OD-2]
+5. IF the ticket is Used, THEN revert `TicketNotValid` (second check-in rejected).
+6. WHEN the event organizer or Admin calls `revokeTicket(tokenId)` for a Valid ticket of an Active event before `eventTime`, THE contract SHALL set `status = Revoked`, reserve the ticket's `originalPrice` for refund, and emit `TicketRevoked`. [OD-4]
 
-1. `getListing(tokenId)` SHALL return the stored `Listing` (all zero if none).
-2. `pendingProceeds(seller)`, `ticketNft()`, `feeBps()`, and `MAX_FEE_BPS()` SHALL be public views.
-3. `quoteSale(price)` SHALL return `(fee, sellerAmount)` using the same formula as `buyListing`, with no revert for any `price`.
-4. THERE SHALL be no on-chain listing enumeration; clients and the indexer rebuild listing lists from events. [OD-M11]
+## Requirement 5: Money flows (pull payments)
 
-### R7. Anti-scalping integrity
+User story: As a Buyer, I want my money held safely until the event happens, so that I can get a refund if it is canceled; as an Organizer, I want to withdraw revenue after the event.
 
-1. THE only way this contract moves a ticket SHALL be `transferByMarketplace(seller, buyer, tokenId)` inside `buyListing`, for a listing the current holder created themselves.
-2. THE price paid SHALL never exceed the cap of the ticket.
-3. Tickets that are not transferable SHALL never be sold.
-4. THE money invariant in `design.md` §6 SHALL hold after every call.
-5. KNOWN LIMITATION: resale purchases do not count toward TicketNFT's per-wallet limit, so one wallet can accumulate tickets through resale. THIS SHALL be documented as a risk. [OD-M10]
+1. The contract SHALL NOT push ETH to any address except to `msg.sender` inside `withdraw` and `claimRefund`.
+2. WHEN the event organizer calls `withdraw(eventId)` after `eventTime` on an Active event, THE contract SHALL send the event's primary revenue plus resale fees, zero both before the external call, and emit `RevenueWithdrawn`.
+3. IF `withdraw` is called before `eventTime` on an Active event, THEN revert `WithdrawNotAllowed`.
+4. WHEN `withdraw` is called on a Canceled event, THE contract SHALL pay only resale fees, never primary revenue. [OD-7]
+5. WHEN the Holder calls `claimRefund(tokenId)` and the ticket is Revoked, or its event is Canceled and the ticket is Valid or Used [OD-6], THE contract SHALL burn the token, send `originalPrice` to the Holder, and emit `RefundClaimed`.
+6. A ticket SHALL be refundable at most once (burn makes the second call revert).
+7. `buyTicket`, `withdraw`, `claimRefund` and `receiveResaleFee` SHALL be `nonReentrant` and follow checks-effects-interactions.
+8. IF an ETH transfer fails, THEN the call SHALL revert `EthTransferFailed`.
+9. Escrow accounting SHALL be per event, so a shortfall in one event can never be paid from another event's funds.
 
-### R8. Events and errors
+## Requirement 6: Anti-scalping transfer rules
 
-1. EVERY state change SHALL emit exactly one event as defined in `design.md` §8, with the `indexed` fields given there.
-2. THE contract SHALL use custom errors only (no revert strings), as defined in `design.md` §7.
-3. Error names that already exist in TicketNFT SHALL keep the identical signature so one merged ABI decodes both; error names with a different signature SHALL NOT be reused (hence `NoProceeds`, not `NothingToWithdraw`).
+User story: As the platform, I want tickets to move only through our capped marketplace, so that scalpers cannot resell above the cap.
 
-### R9. Code quality and deliverables
+1. The contract SHALL override `_update` so that only mint, burn, and transfers initiated by `MARKETPLACE_ROLE` succeed. Direct `transferFrom`/`safeTransferFrom` SHALL revert `TransferNotAllowed`.
+2. `approve` and `setApprovalForAll` SHALL always revert `ApprovalsDisabled`.
+3. WHEN the Marketplace calls `transferByMarketplace(from, to, tokenId)` for a transferable ticket owned by `from`, THE contract SHALL move it to `to` and emit ERC-721 `Transfer`.
+4. `isTransferable(tokenId)` SHALL return true only if the token exists, status is Valid, the event is Active, and `block.timestamp < eventTime`. [OD-11]
+5. `getResaleCap(tokenId)` SHALL return `originalPrice * resaleCapBps / 10000`, rounded down.
+6. WHEN the Marketplace calls `receiveResaleFee(eventId)` with `msg.value > 0` for an Active event, THE contract SHALL credit the event's resale fees and emit `ResaleFeeReceived`.
+7. IF a non-Marketplace calls `transferByMarketplace` or `receiveResaleFee`, THEN revert (AccessControl).
 
-1. Solidity `^0.8.24` (compiled with 0.8.28 by the project), OpenZeppelin 5.6.1 with plain imports, compiling in Hardhat 2.29.1 and Remix. No new dependencies. [OD-M18]
-2. `contract Marketplace is IMarketplace, ReentrancyGuard`; NatSpec on every external function, including the rounding note and the kill-switch note.
-3. TESTS in `blockchain/test/Marketplace.test.js` SHALL cover every requirement above; target 100% line and branch coverage of `Marketplace.sol`.
-4. THE reentrancy/rejecting-seller helper SHALL live in `blockchain/contracts/test/`.
-5. `shared/abi/Marketplace.json` SHALL be generated by `npm run export-abi`. [OD-M17]
-6. `docs/contracts-marketplace.md` SHALL be written in Indonesian, following `docs/contracts.md`.
-7. TicketNFT source and its existing tests SHALL remain unchanged and green.
+## Requirement 7: Code quality and deliverables
+
+1. Solidity `^0.8.24`, OpenZeppelin Contracts pinned to an exact v5 version, plain `@openzeppelin/contracts/...` imports, compiles in Remix without changes.
+2. Custom errors only (no revert strings), an event for every state change, NatSpec on all public/external items.
+3. No unbounded loops over user-controlled arrays; no secrets in source.
+4. Timestamp assumptions and bps rounding documented in NatSpec and `docs/contracts.md`.
+5. Hardhat tests in `blockchain/test/TicketNFT.test.js` cover the list in `tasks.md`.
+6. ABI exported to `shared/abi/TicketNFT.json`.
+7. `docs/contracts.md` (Indonesian) lists every function: name, params, caller, events, errors.
+8. A known risks/assumptions list and Slither command are delivered for the audit group.
