@@ -5,25 +5,40 @@ terpisah; workflow GitHub Pages yang ada hanya menerbitkan frontend dari branch 
 
 ## 1. Lokal dengan node Hardhat (tanpa Sepolia)
 
-Gunakan tiga terminal.
+Gunakan tiga terminal. Repo ini belum memiliki script deploy, jadi `backend/scripts/seed-local.mjs` menyediakannya
+khusus untuk node lokal (memakai akun Hardhat bawaan yang kuncinya publik; jangan dipakai di jaringan sungguhan).
 
-1. Node blockchain lokal (dari folder `blockchain/`, setelah `npm ci`):
+1. **Terminal 1, node blockchain lokal** (dari folder `blockchain/`, setelah `npm ci`). Biarkan tetap berjalan:
    ```
    npx hardhat node
    ```
-   Catatan: perintah ini mengompilasi kontrak dan memerlukan akses ke binaries.soliditylang.org.
-2. Deploy kontrak ke node tersebut memakai script deployment milik Anggota 2, lalu catat alamat `TicketNFT`,
-   `Marketplace`, dan nomor blok deployment. Beri `ORGANIZER_ROLE` ke akun organizer dan `MARKETPLACE_ROLE` ke
-   alamat `Marketplace`.
-3. Backend (dari folder `backend/`):
+   Perintah ini mengompilasi kontrak lebih dulu dan memerlukan akses internet ke binaries.soliditylang.org.
+2. **Terminal 2, isi data contoh** (dari folder `backend/`):
    ```
    npm ci
-   copy .env.example .env      (macOS/Linux: cp .env.example .env)
+   npm run seed:chain
    ```
-   Isi `.env`: `RPC_URL=http://127.0.0.1:8545`, `CHAIN_ID=31337`, kedua alamat kontrak, `START_BLOCK` = blok deployment,
-   `CONFIRMATIONS=0`. Lalu `npm start`. Periksa `http://localhost:3001/api/status`.
+   Script ini men-deploy `TicketNFT` dan `Marketplace`, memberi `ORGANIZER_ROLE` dan `MARKETPLACE_ROLE`, membuat 2 event,
+   membeli 2 tiket, membuat 1 listing resale, menugaskan 1 Gate Checker, dan menulis `backend/.env` otomatis
+   (alamat kontrak, `START_BLOCK`, `CONFIRMATIONS=0`). Bila node tidak di `127.0.0.1:8545`, set `RPC_URL` lebih dulu.
+3. **Terminal 2, jalankan backend:**
+   ```
+   npm start
+   ```
+   `npm start` membaca `.env` otomatis (Node 22.9 atau lebih baru). Tunggu sampai muncul `[indexer] blok ... event baru`.
+4. **Terminal 3, simpan detail off-chain** (dari folder `backend/`, backend harus sudah jalan):
+   ```
+   npm run seed:details
+   ```
+5. **Lihat hasilnya** di browser:
+   - `http://localhost:3001/api/events` (2 event; event 1 ber-`hashStatus: match`, event 2 `unset`)
+   - `http://localhost:3001/api/listings?buyable=1` (1 listing resale)
+   - `http://localhost:3001/api/tickets` (2 tiket)
 
-Mode `AUTH_MODE=dev` cukup untuk pengembangan lokal. Untuk hanya menguji alur tanpa node manual, jalankan `npm run test:e2e`.
+Mengulang dari awal: hentikan semua terminal, hapus folder `backend/data`, lalu mulai lagi dari langkah 1
+(node Hardhat baru selalu kosong).
+
+Mode `AUTH_MODE=dev` cukup untuk pengembangan lokal. Untuk menguji seluruh alur otomatis tanpa node manual, jalankan `npm run test:e2e`.
 
 ## 2. Sepolia
 
@@ -37,7 +52,7 @@ Mode `AUTH_MODE=dev` cukup untuk pengembangan lokal. Untuk hanya menguji alur ta
 
 ## 3. Produksi sederhana (satu server)
 
-Prasyarat: Node.js 24, reverse proxy (Nginx/Caddy) dengan HTTPS.
+Prasyarat: Node.js 24 (minimal 22.13), reverse proxy (Nginx/Caddy) dengan HTTPS.
 
 ```
 cd backend && npm ci --omit=dev

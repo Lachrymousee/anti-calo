@@ -25,8 +25,10 @@ Database hanya salinan (proyeksi) yang dapat dibangun ulang dari `chain_events`.
 cd backend
 npm ci
 cp .env.example .env        # Windows: copy .env.example .env
-npm start
+npm start                   # membaca .env otomatis
 ```
+
+Untuk data contoh di node Hardhat lokal, lihat bagian 1 panduan deployment (`npm run seed:chain`, `npm run seed:details`).
 
 Tanpa `RPC_URL` dan alamat kontrak, API tetap berjalan tetapi indexer tidak aktif (data event kosong).
 Untuk mengaktifkan indexer, isi `RPC_URL`, `TICKET_NFT_ADDRESS`, `MARKETPLACE_ADDRESS`, dan `START_BLOCK`
