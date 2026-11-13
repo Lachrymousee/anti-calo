@@ -315,7 +315,7 @@ function demoBanner() {
           el(
             "span",
             { class: "demo-detail" },
-            " · Event, tiket, dan listing dibaca dari indexer; transaksi masih demo",
+            " · Data dari indexer dan transaksi wallet asli; halaman lain masih demo",
           ),
         ),
         el("a", { href: "guide.html" }, "Batas integrasi", icon("arrow", 14)),

@@ -36,7 +36,8 @@ export function mapEvent(e, base = API_URL) {
     id: e.id, title: d?.title ?? `Event #${e.id}`, category: d?.category ?? '', description: d?.description ?? '',
     date: new Date(Number(e.eventTime) * 1000).toISOString(), venue, city, price: weiToEth(e.ticketPrice),
     capacity: e.maxSupply, sold: e.sold, checkedIn: e.checkedIn, status: e.status === 'canceled' ? 'cancelled' : 'live',
-    organizer: e.organizer, checkers: e.gateCheckers ?? [], posterUrl: d?.posterUrl ? `${base}${d.posterUrl}` : null,
+    organizer: e.organizer, checkers: e.gateCheckers ?? [], ticketPriceWei: e.ticketPrice, saleStart: Number(e.saleStart), saleEnd: Number(e.saleEnd),
+    eventTime: Number(e.eventTime), maxPerWallet: e.maxPerWallet, resaleCapBps: e.resaleCapBps, posterUrl: d?.posterUrl ? `${base}${d.posterUrl}` : null,
     detailsComplete: Boolean(d), hashStatus: d?.hashStatus ?? 'missing', computedHash: d?.computedHash ?? null, onchainHash: e.detailsHash,
   };
 }
@@ -85,6 +86,7 @@ export function createApiClient({ baseUrl = API_URL, fetchImpl = (...a) => globa
 
   return {
     status: () => request('GET', '/api/status'),
+    config: () => request('GET', '/api/config'),
     roles: (address) => request('GET', `/api/roles/${address}`),
     events: async (query = { limit: 100 }) => (await request('GET', '/api/events', { query })).items.map((e) => mapEvent(e, baseUrl)),
     tickets: async (owner) => (await request('GET', '/api/tickets', { query: { owner, limit: 100 } })).items,

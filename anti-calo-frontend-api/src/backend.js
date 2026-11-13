@@ -1,6 +1,8 @@
 import { sameAddress } from './model.js';
 import { connectInjectedWallet } from './chain.js';
 import { API_URL, CATEGORIES, createApiClient, browserWallet, joinLocation, mapTicket } from './api.js';
+import { createOnchain, signerFor, switchChain, waitForIndexer, explorerTxUrl } from './onchain.js';
+import { eventActions, ticketActions, listingActions, createEventPanel, gatePanel, adminPanel, proceedsPanel } from './backend-actions.js';
 import { el, icon, badge, button, link, field, shortAddress, toast, dateText, timeText, money, statusBadge } from './ui.js';
 
 const HASH_BADGE = {
@@ -13,11 +15,11 @@ const HASH_BADGE = {
 // Halaman "Lab Backend": membaca event, tiket, dan listing dari backend (indexer) serta memungkinkan
 // Organizer menyimpan detail off-chain. Pembelian dan check-in marketplace tetap mode demo.
 export function createBackendPage({ initialWallet = null, onWalletConnected = () => {}, injected = globalThis.window?.ethereum,
-  baseUrl = API_URL, createClient, chain = {} } = {}) {
+  baseUrl = API_URL, createClient, makeOnchain, chain = {}, now = () => Math.floor(Date.now() / 1000) } = {}) {
   const connect = chain.connectInjectedWallet ?? connectInjectedWallet;
   const makeClient = createClient ?? ((wallet) => createApiClient({ baseUrl, wallet: wallet ? browserWallet(injected, wallet.address) : null }));
   let wallet = initialWallet, client = null, roles = null, events = [], tickets = [], listings = [], editing = null, disposed = false, epoch = 0;
-  let statusInfo = null, loadError = '', lastHash = null;
+  let statusInfo = null, loadError = '', lastHash = null, cfg = null, txBusy = false, pendingEdit = null, txInfo = null;
 
   const status = el('div', { class: 'backend-status', 'data-testid': 'backend-status', role: 'status', 'aria-live': 'polite' });
   const walletBox = el('div', { class: 'backend-wallet', 'data-testid': 'backend-wallet' });
@@ -26,6 +28,8 @@ export function createBackendPage({ initialWallet = null, onWalletConnected = ()
   const editorBox = el('div', { 'data-testid': 'backend-editor' });
   const ticketsBox = el('div', { 'data-testid': 'backend-tickets' });
   const listingsBox = el('div', { 'data-testid': 'backend-listings' });
+  const actionsBox = el('div', { 'data-testid': 'backend-actions' });
+  const txBox = el('div', { class: 'backend-tx', 'data-testid': 'backend-tx', role: 'status', 'aria-live': 'polite' });
 
   const fail = (e) => { error.textContent = e?.message ?? 'Tindakan belum berhasil.'; };
   const canEdit = (ev) => Boolean(wallet && roles?.organizer && sameAddress(ev.organizer, wallet.address));
@@ -35,14 +39,53 @@ export function createBackendPage({ initialWallet = null, onWalletConnected = ()
     error.textContent = ''; loadError = '';
     try {
       client = makeClient(wallet);
-      const [s, evs, ls, r, ts] = await Promise.all([
+      const [s, evs, ls, r, ts, c] = await Promise.all([
         client.status(), client.events(), client.listings(),
         wallet ? client.roles(wallet.address) : null, wallet ? client.tickets(wallet.address) : [],
+        client.config ? client.config().catch(() => null) : null,
       ]);
       if (disposed || mine !== epoch) return;
-      statusInfo = s; events = evs; listings = ls; roles = r; tickets = ts;
+      statusInfo = s; events = evs; listings = ls; roles = r; tickets = ts; cfg = c;
+      if (pendingEdit && events.some((e) => e.id === pendingEdit)) { editing = pendingEdit; pendingEdit = null; }
     } catch (e) { if (disposed || mine !== epoch) return; statusInfo = null; loadError = e.message; }
     draw();
+  }
+
+  const chainOk = () => Boolean(wallet && cfg?.ticketAddress && cfg?.marketplaceAddress && Number(wallet.chainId) === Number(cfg.chainId));
+  const ctx = () => ({ wallet, roles, cfg, chainOk: chainOk(), now, run, sameAddress, created: (id) => { pendingEdit = id; } });
+
+  function setTx(message, hash) { txInfo = message ? { message, hash } : null; drawTx(); }
+  // Satu transaksi pada satu waktu: simulasi, persetujuan wallet, konfirmasi, lalu menunggu indexer menyusul.
+  async function run(label, fn) {
+    if (txBusy) { error.textContent = 'Masih ada transaksi yang berjalan. Tunggu sampai selesai.'; return; }
+    txBusy = true; error.textContent = '';
+    try {
+      setTx(`${label}…`);
+      const onStatus = (m) => setTx(`${label}: ${m}`);
+      const chain = makeOnchain ? await makeOnchain({ onStatus }) : createOnchain({ signer: await signerFor(injected, wallet.address), ticketAddress: cfg.ticketAddress, marketplaceAddress: cfg.marketplaceAddress, onStatus });
+      const result = await fn(chain);
+      if (result?.blockNumber !== undefined) {
+        setTx(`${label}: terkonfirmasi di blok ${result.blockNumber}. Menunggu indexer…`, result.hash);
+        const synced = await waitForIndexer(client, result.blockNumber).catch(() => false);
+        setTx(synced ? `${label}: berhasil.` : `${label}: berhasil di blockchain, tetapi indexer belum menyusul. Muat ulang beberapa saat lagi.`, result.hash);
+        toast(`${label} berhasil.`);
+      }
+      await refresh();
+    } catch (e) { setTx(''); fail(e); } finally { txBusy = false; }
+  }
+  function drawTx() {
+    if (!txInfo) { txBox.replaceChildren(); return; }
+    const url = txInfo.hash && cfg ? explorerTxUrl(cfg.chainId, txInfo.hash) : null;
+    txBox.replaceChildren(el('span', {}, txInfo.message), txInfo.hash ? el('code', {}, txInfo.hash) : null, url ? link('Lihat di explorer', url, { kind: 'text', iconName: 'external', target: '_blank', rel: 'noopener noreferrer' }) : null);
+  }
+  function drawActions() {
+    const c = ctx();
+    const banner = !wallet || !statusInfo ? null
+      : !cfg?.ticketAddress || !cfg?.marketplaceAddress ? el('div', { class: 'notice', 'data-testid': 'backend-network' }, icon('info'), el('span', {}, 'Alamat kontrak belum dikonfigurasi di backend, jadi transaksi dinonaktifkan.'))
+      : !c.chainOk ? el('div', { class: 'notice', 'data-testid': 'backend-network' }, icon('info'), el('span', {}, `Wallet berada di jaringan lain. Transaksi memerlukan Chain ID ${cfg.chainId}.`),
+          button('Ganti jaringan', async () => { await switchChain(cfg.chainId, injected); wallet = await connect(injected); onWalletConnected(wallet); await refresh(); }, { kind: 'outline', 'data-testid': 'backend-switch' }))
+      : null;
+    actionsBox.replaceChildren(...[banner, createEventPanel(c), gatePanel(c, events), adminPanel(c), proceedsPanel(c)].filter(Boolean));
   }
 
   function drawStatus() {
@@ -73,7 +116,8 @@ export function createBackendPage({ initialWallet = null, onWalletConnected = ()
           el('p', { class: 'field-hint' }, `Organizer ${shortAddress(ev.organizer)} · Event #${ev.id}`),
           badge(hashText, hashKind)),
         el('div', { class: 'backend-event-actions' },
-          canEdit(ev) ? button(ev.detailsComplete ? 'Edit detail' : 'Isi detail', () => { editing = ev.id; lastHash = null; error.textContent = ''; draw(); }, { kind: 'outline', iconName: 'book', 'data-testid': `backend-edit-${ev.id}` }) : null));
+          canEdit(ev) ? button(ev.detailsComplete ? 'Edit detail' : 'Isi detail', () => { editing = ev.id; lastHash = null; error.textContent = ''; draw(); }, { kind: 'outline', iconName: 'book', 'data-testid': `backend-edit-${ev.id}` }) : null,
+          eventActions(ev, ctx())));
     }));
   }
 
@@ -125,11 +169,12 @@ export function createBackendPage({ initialWallet = null, onWalletConnected = ()
     if (!wallet) { ticketsBox.replaceChildren(el('p', { class: 'muted' }, 'Hubungkan wallet untuk melihat tiket on-chain milikmu.')); return; }
     if (!tickets.length) { ticketsBox.replaceChildren(el('p', { class: 'muted', 'data-testid': 'backend-no-tickets' }, 'Wallet ini belum memiliki tiket on-chain.')); return; }
     const listed = new Map(listings.map((l) => [l.tokenId, l]));
-    ticketsBox.replaceChildren(...tickets.filter((t) => ['valid', 'used'].includes(t.status)).map((t) => {
+    ticketsBox.replaceChildren(...tickets.filter((t) => ['valid', 'used', 'revoked'].includes(t.status)).map((t) => {
       const m = mapTicket(t, listed.get(t.tokenId)), ev = events.find((e) => e.id === m.eventId);
       return el('div', { class: 'backend-row', 'data-testid': `backend-ticket-${m.id}` },
         el('strong', {}, `Tiket #${m.id}`), el('span', {}, ev?.title ?? `Event #${m.eventId}`), statusBadge(m.status),
-        m.resalePrice ? el('span', {}, `Resale ${money(m.resalePrice)}`) : null);
+        m.resalePrice ? el('span', {}, `Resale ${money(m.resalePrice)}`) : null,
+        ticketActions(m, ev, listed.get(t.tokenId), ctx()));
     }));
   }
 
@@ -139,11 +184,11 @@ export function createBackendPage({ initialWallet = null, onWalletConnected = ()
       const ev = events.find((e) => e.id === l.eventId);
       return el('div', { class: 'backend-row', 'data-testid': `backend-listing-${l.tokenId}` }, el('strong', {}, `Tiket #${l.tokenId}`),
         el('span', {}, ev?.title ?? `Event #${l.eventId}`), el('span', {}, `Resale ${money(mapTicket({ tokenId: l.tokenId, eventId: l.eventId, owner: l.seller, status: 'valid', originalPrice: l.price }).facePrice)}`),
-        el('span', { class: 'muted' }, `Penjual ${shortAddress(l.seller)}`));
+        el('span', { class: 'muted' }, `Penjual ${shortAddress(l.seller)}`), listingActions(l, ctx()));
     }));
   }
 
-  function draw() { if (disposed) return; drawStatus(); drawWallet(); drawEvents(); drawEditor(); drawTickets(); drawListings(); }
+  function draw() { if (disposed) return; drawStatus(); drawWallet(); drawActions(); drawEvents(); drawEditor(); drawTickets(); drawListings(); drawTx(); }
 
   const connectBtn = button('Hubungkan wallet', async () => {
     try { wallet = await connect(injected); onWalletConnected(wallet); await refresh(); } catch (e) { fail(e); }
@@ -151,13 +196,16 @@ export function createBackendPage({ initialWallet = null, onWalletConnected = ()
   const reloadBtn = button('Muat ulang', refresh, { kind: 'outline', iconName: 'refresh', 'data-testid': 'backend-refresh' });
 
   const walletChanged = (accounts) => { if (disposed) return; wallet = accounts?.length ? { address: accounts[0], chainId: wallet?.chainId ?? 0 } : null; editing = null; lastHash = null; roles = null; tickets = []; onWalletConnected(wallet); refresh(); };
+  const chainChanged = (id) => { if (disposed || !wallet) return; wallet = { ...wallet, chainId: Number(id) }; onWalletConnected(wallet); draw(); };
+  injected?.on?.('chainChanged', chainChanged);
   injected?.on?.('accountsChanged', walletChanged);
 
   const main = el('main', { id: 'main', class: 'container integration-page backend-page' },
     el('div', { class: 'page-top' }, el('div', {}, el('div', { class: 'eyebrow' }, 'LAB BACKEND'), el('h1', {}, 'Data event dari indexer, bukan data demo.'),
       el('p', { class: 'muted' }, 'Halaman ini membaca event, tiket, dan listing resale dari backend yang mengindeks kontrak. Organizer dapat menyimpan detail dan poster off-chain.'))),
-    el('div', { class: 'notice integration-notice' }, icon('info'), el('span', {}, 'Hanya pembacaan data dan detail off-chain yang tersambung ke backend. Pembelian, resale, dan check-in di halaman lain masih mode demo.')),
-    el('section', { class: 'panel' }, el('div', { class: 'panel-heading' }, el('h2', {}, 'Koneksi'), el('div', { class: 'integration-actions' }, connectBtn, reloadBtn)), status, walletBox, error),
+    el('div', { class: 'notice integration-notice' }, icon('info'), el('span', {}, 'Halaman ini memakai wallet dan kontrak asli: pembelian, resale, check-in, dan penarikan dana dikirim sebagai transaksi. Halaman lain di website masih mode demo.')),
+    el('section', { class: 'panel' }, el('div', { class: 'panel-heading' }, el('h2', {}, 'Koneksi'), el('div', { class: 'integration-actions' }, connectBtn, reloadBtn)), status, walletBox, error, txBox),
+    actionsBox,
     el('section', { class: 'panel' }, el('div', { class: 'panel-heading' }, el('h2', {}, 'Event on-chain')), eventsBox), editorBox,
     el('div', { class: 'integration-columns' },
       el('section', { class: 'panel' }, el('div', { class: 'panel-heading' }, el('h2', {}, 'Tiket di wallet ini')), ticketsBox),
@@ -165,5 +213,5 @@ export function createBackendPage({ initialWallet = null, onWalletConnected = ()
     el('p', { class: 'field-hint' }, 'Sumber data: backend anti-calo. Lihat docs/PANDUAN-DEPLOYMENT.md untuk menjalankannya.', ' ', link('Panduan', 'guide.html', { kind: 'text' })));
 
   draw(); refresh();
-  return { main, cleanup() { disposed = true; injected?.removeListener?.('accountsChanged', walletChanged); } };
+  return { main, cleanup() { disposed = true; injected?.removeListener?.('accountsChanged', walletChanged); injected?.removeListener?.('chainChanged', chainChanged); } };
 }
