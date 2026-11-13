@@ -188,6 +188,14 @@ test('AUTH_MODE=signature: tanda tangan valid, replay, body diganti, kedaluwarsa
   assert.equal((await call(`${s.base}${p}`, del.init)).status, 204);
 });
 
+test('GET /api/config memberi chain dan alamat kontrak (tanpa rahasia)', async (t) => {
+  const s = await setup(); t.after(s.close);
+  const r = await call(`${s.base}/api/config`);
+  assert.equal(r.status, 200);
+  assert.deepEqual(Object.keys(r.body).sort(), ['chainId', 'confirmations', 'marketplaceAddress', 'ticketAddress']);
+  assert.equal(r.body.ticketAddress, null);                       // belum diisi pada konfigurasi tes
+});
+
 test('konfigurasi: AUTH_MODE=dev ditolak pada production', () => {
   assert.throws(() => loadConfig({ NODE_ENV: 'production', AUTH_MODE: 'dev' }), /production/);
   assert.equal(loadConfig({ NODE_ENV: 'production' }).authMode, 'signature');

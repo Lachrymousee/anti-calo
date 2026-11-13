@@ -9,6 +9,7 @@ const pages = [
   "gate",
   "guide",
   "integration",
+  "backend",
   "docs",
 ];
 

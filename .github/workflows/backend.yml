@@ -3,9 +3,9 @@ name: Backend tests
 on:
   push:
     branches: [main, 'feature/**']
-    paths: ['backend/**', 'shared/abi/**', 'blockchain/contracts/**', '.github/workflows/backend.yml']
+    paths: ['backend/**', 'shared/abi/**', 'blockchain/contracts/**', 'src/**', 'tests/**', 'backend.html', 'vite.config.js', '.github/workflows/backend.yml']
   pull_request:
-    paths: ['backend/**', 'shared/abi/**', 'blockchain/contracts/**', '.github/workflows/backend.yml']
+    paths: ['backend/**', 'shared/abi/**', 'blockchain/contracts/**', 'src/**', 'tests/**', 'backend.html', 'vite.config.js', '.github/workflows/backend.yml']
 
 permissions:
   contents: read
@@ -35,3 +35,9 @@ jobs:
       - name: E2E kontrak asli
         working-directory: backend
         run: npm run test:e2e
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Tes frontend (termasuk kompatibilitas klien-backend)
+        run: npm test

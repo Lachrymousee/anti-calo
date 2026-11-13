@@ -1,9 +1,0 @@
-node_modules/
-data/
-.env
-.env.*
-!.env.example
-*.log
-test-support/cache/
-test-support/artifacts/
-test-support/node_modules

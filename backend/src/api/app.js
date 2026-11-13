@@ -71,6 +71,12 @@ export function createApp({ db, config, now = () => Math.floor(Date.now() / 1000
       updatedAt: getState(db, 'updated_at'), authMode: config.authMode });
   });
 
+  // Alamat kontrak dan chain yang diindeks; frontend memakainya untuk mengirim transaksi ke kontrak yang sama.
+  app.get('/api/config', (_req, res) => {
+    res.json({ chainId: config.chainId, ticketAddress: config.ticketAddress || null, marketplaceAddress: config.marketplaceAddress || null,
+      confirmations: config.confirmations });
+  });
+
   app.get('/api/categories', (_req, res) => res.json({ categories: CATEGORIES }));
 
   app.get('/api/roles/:address', (req, res) => {
