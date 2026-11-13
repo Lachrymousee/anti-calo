@@ -81,6 +81,7 @@ Kesalahan berbentuk `{ "error": "<kode>", "message": "<pesan>" }`.
 | `GET /api/health` | publik | Pemeriksaan hidup. |
 | `GET /api/status` | publik | Blok terakhir terindeks, head, waktu pembaruan. |
 | `GET /api/categories` | publik | Daftar kategori yang diizinkan. |
+| `GET /api/config` | publik | Chain ID dan alamat kontrak yang diindeks (dipakai frontend untuk mengirim transaksi). |
 | `GET /api/roles/:address` | publik | `admin`, `organizer`, event yang dimiliki, event penugasan Gate Checker. |
 | `POST /api/details/hash` | publik | Hitung `detailsHash` dari detail event. |
 | `GET /api/events` | publik | Query: `category`, `status`, `organizer`, `q`, `page`, `limit` (maks 100). |

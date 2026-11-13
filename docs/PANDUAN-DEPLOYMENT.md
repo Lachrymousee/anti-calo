@@ -40,6 +40,63 @@ Mengulang dari awal: hentikan semua terminal, hapus folder `backend/data`, lalu 
 
 Mode `AUTH_MODE=dev` cukup untuk pengembangan lokal. Untuk menguji seluruh alur otomatis tanpa node manual, jalankan `npm run test:e2e`.
 
+## 1b. Menyambungkan frontend (Lab Backend)
+
+Halaman `backend.html` memakai wallet dan kontrak asli: membaca event, tiket, dan listing dari backend, serta
+mengirim transaksi (beli tiket, resale, check-in, refund, penarikan dana, pengelolaan role). Organizer juga dapat
+menyimpan detail dan poster event. Halaman lain di website (Jelajahi, Tiket saya, dashboard) masih mode demo.
+
+**Persiapan**
+
+1. Buat file `.env` di **root repo** (bukan di `backend/`):
+   ```
+   VITE_API_URL=http://localhost:3001
+   ```
+   Tanpa nilai ini fitur backend nonaktif dan website berjalan persis seperti sebelumnya. Nilainya publik
+   (tertanam di hasil build); jangan memasukkan rahasia.
+2. Backend harus berjalan dengan alamat kontrak terisi (bagian 1). Frontend mengambil alamat kontrak dan Chain ID dari
+   `GET /api/config`, jadi tidak perlu dikonfigurasi dua kali.
+3. `CORS_ORIGINS` di `backend/.env` harus memuat alamat frontend persis seperti di address bar, misalnya
+   `http://localhost:5173`. Bila membuka lewat `127.0.0.1` atau IP jaringan, tambahkan juga (pisahkan dengan koma),
+   lalu restart backend.
+4. Dari root repo: `npm install`, `npm run dev`, lalu buka `http://localhost:5173/anti-calo/backend.html`
+   (menu **Lab Backend** muncul setelah `VITE_API_URL` terisi; restart `npm run dev` setelah mengubah `.env`).
+
+**MetaMask untuk node Hardhat lokal**
+
+1. Tambahkan jaringan: RPC `http://127.0.0.1:8545`, Chain ID `31337`, simbol `ETH`.
+2. Impor akun Hardhat lewat *Import account* memakai private key dari log `npx hardhat node` (kunci ini publik; **hanya
+   untuk node lokal**, jangan pernah mengirim dana sungguhan ke alamat ini).
+
+   | Akun | Alamat | Peran pada data contoh `seed:chain` |
+   | ---- | ------ | ------------------------------------ |
+   | #0 | `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266` | Admin |
+   | #1 | `0x70997970C51812dc3A010C7d01b50e0d17dc79C8` | Organizer (pemilik event 1 dan 2) |
+   | #2 | `0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC` | Pembeli (punya 2 tiket, 1 listing resale) |
+   | #3 | `0x90F79bf6EB2c4f870365E785982E1f101E93b906` | Gate Checker event 1 |
+
+3. Setiap kali node Hardhat dimulai ulang, hapus cache MetaMask agar nonce tidak salah: *Settings, Advanced,
+   Clear activity tab data*. Tanpa ini transaksi gagal dengan galat nonce.
+
+**Yang dapat dicoba per akun**
+
+- Pembeli (#2): **Beli tiket**, **Jual kembali** (harga dibatasi cap resale), **Batalkan listing**, **Klaim refund**,
+  **Beli** pada listing orang lain, **Tarik hasil resale**.
+- Organizer (#1): **Buat event baru**, **Isi/Edit detail** dan poster, **Kunci hash on-chain**, **Tugaskan/Cabut**
+  Gate Checker, **Batalkan event**, **Tarik dana** (setelah event dimulai).
+- Gate Checker (#3): **Check-in tiket** (ID tiket dimasukkan manual; verifikasi QR ada di Lab Integrasi).
+- Admin (#0): **Beri/Cabut role Organizer**, **Cabut tiket**, batalkan event.
+
+Setiap aksi disimulasikan dulu; bila kontrak akan menolaknya, pesan penyebabnya muncul sebelum MetaMask meminta
+persetujuan. Setelah transaksi terkonfirmasi, halaman menunggu indexer menyusul lalu memuat ulang data (di Sepolia
+dengan `CONFIRMATIONS=3` ini dapat memakan beberapa puluh detik).
+
+Pada `AUTH_MODE=dev` penyimpanan detail event tidak meminta tanda tangan. Pada `AUTH_MODE=signature` MetaMask meminta
+satu tanda tangan pesan (bukan transaksi, tanpa biaya) untuk setiap penyimpanan, unggahan, atau penghapusan detail.
+
+**Batasan**: pembelian dan check-in di halaman demo lain belum memakai kontrak; check-in belum memverifikasi QR
+EIP-712 sebelum transaksi; belum ada pengujian di browser dengan MetaMask sungguhan dan di Sepolia.
+
 ## 2. Sepolia
 
 1. Siapkan RPC Sepolia (penyedia RPC pilihan tim). Backend hanya membaca; **tidak memerlukan private key**.

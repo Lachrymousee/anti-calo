@@ -26,6 +26,8 @@ import {
 } from "./model.js";
 import { connectInjectedWallet, switchToSepolia } from "./chain.js";
 import { createIntegrationPage } from "./integration.js";
+import { createBackendPage } from "./backend.js";
+import { hasApi } from "./api.js";
 import { createDocsPage } from "./docs.js";
 import {
   el,
@@ -203,7 +205,7 @@ async function connectWallet() {
         : "Wallet terhubung. Jaringan belum Sepolia.",
       "success",
     );
-    if (page !== "integration") accountDialog();
+    if (page !== "integration" && page !== "backend") accountDialog();
   } catch (err) {
     openModal(
       "Hubungkan wallet",
@@ -249,6 +251,11 @@ function header() {
         link("Cara kerja", "guide.html", {
           class: page === "guide" ? "active" : "",
         }),
+        hasApi()
+          ? link("Lab Backend", "backend.html", {
+              class: page === "backend" ? "active" : "",
+            })
+          : null,
       ),
       el(
         "div",
@@ -293,6 +300,27 @@ function header() {
   );
 }
 function demoBanner() {
+  if (page === "backend")
+    return el(
+      "div",
+      { class: "demo-banner" },
+      el(
+        "div",
+        { class: "container demo-inner" },
+        el(
+          "span",
+          {},
+          el("span", { class: "status-dot" }),
+          "Lab Backend",
+          el(
+            "span",
+            { class: "demo-detail" },
+            " · Data dari indexer dan transaksi wallet asli; halaman lain masih demo",
+          ),
+        ),
+        el("a", { href: "guide.html" }, "Batas integrasi", icon("arrow", 14)),
+      ),
+    );
   if (page === "integration")
     return el(
       "div",
@@ -409,6 +437,16 @@ function render() {
       onConfigChange: (c) => {
         integrationDraft = c;
       },
+      onWalletConnected: (w) => {
+        connectedWallet = w;
+        document.querySelector(".site-header")?.replaceWith(header());
+      },
+    });
+    content = lab.main;
+    cleanupPage = lab.cleanup;
+  } else if (page === "backend") {
+    const lab = createBackendPage({
+      initialWallet: connectedWallet,
       onWalletConnected: (w) => {
         connectedWallet = w;
         document.querySelector(".site-header")?.replaceWith(header());
