@@ -16,7 +16,7 @@ export const wallets = {
 };
 export const addr = (k) => wallets[k].address.toLowerCase();
 
-// Provider tiruan: menyimpan log per blok dan meniru reorg lewat "fork".
+
 export class FakeChain {
   constructor() { this.logs = []; this.head = 0; this.fork = 0; this.counter = 0; }
   hashFor(n) { return keccak256(toUtf8Bytes(`block:${n}:fork:${this.fork}`)); }

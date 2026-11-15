@@ -2,9 +2,9 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 
-// Tabel chain_events adalah log mentah (sumber kebenaran lokal). Tabel proyeksi lain dapat
-// dibangun ulang dari chain_events kapan saja (lihat rebuild() di indexer/handlers.js).
-// Nilai uint256 disimpan sebagai TEXT (wei) agar tidak kehilangan presisi.
+
+
+
 export const PROJECTION_TABLES = ['roles', 'events', 'gate_checkers', 'tickets', 'purchases', 'listings', 'sales'];
 
 const SCHEMA = `

@@ -5,13 +5,13 @@ const { loadFixture, time } = require("@nomicfoundation/hardhat-network-helpers"
 const EventStatus = { Active: 0n, Canceled: 1n };
 const TicketStatus = { Valid: 0n, Used: 1n, Revoked: 2n };
 const PRICE = ethers.parseEther("0.01");
-// Note: ethers v6 `Contract` has its own `getEvent()` (for log filters), so the contract's
-// getEvent(uint256) must be called as nft.getFunction("getEvent")(id).
+
+
 
 describe("TicketNFT", function () {
-  // ---------------------------------------------------------------------
-  // Fixtures and helpers
-  // ---------------------------------------------------------------------
+
+
+
 
   async function makeParams(overrides = {}) {
     const now = BigInt(await time.latest());
@@ -38,8 +38,8 @@ describe("TicketNFT", function () {
     await nft.connect(admin).grantRole(MARKETPLACE_ROLE, market.address);
 
     const params = await makeParams();
-    await nft.connect(org1).createEvent(params); // event 1 (org1)
-    await nft.connect(org2).createEvent(params); // event 2 (org2)
+    await nft.connect(org1).createEvent(params);
+    await nft.connect(org2).createEvent(params);
 
     return {
       nft, params, ORGANIZER_ROLE, MARKETPLACE_ROLE,
@@ -47,7 +47,7 @@ describe("TicketNFT", function () {
     };
   }
 
-  /** Event 1 and 2 on sale; buyer1 owns token 1 (event 1), buyer2 owns token 2 (event 2). */
+
   async function soldFixture() {
     const f = await deployFixture();
     await time.increaseTo(f.params.saleStart);
@@ -58,9 +58,9 @@ describe("TicketNFT", function () {
     return f;
   }
 
-  // ---------------------------------------------------------------------
-  // Deployment and roles
-  // ---------------------------------------------------------------------
+
+
+
 
   describe("deployment and roles", function () {
     it("grants DEFAULT_ADMIN_ROLE to the constructor admin", async function () {
@@ -91,14 +91,14 @@ describe("TicketNFT", function () {
 
     it("supports ERC-721 and AccessControl interfaces", async function () {
       const { nft } = await loadFixture(deployFixture);
-      expect(await nft.supportsInterface("0x80ac58cd")).to.equal(true); // IERC721
-      expect(await nft.supportsInterface("0x7965db0b")).to.equal(true); // IAccessControl
+      expect(await nft.supportsInterface("0x80ac58cd")).to.equal(true);
+      expect(await nft.supportsInterface("0x7965db0b")).to.equal(true);
     });
   });
 
-  // ---------------------------------------------------------------------
-  // Event CRUD
-  // ---------------------------------------------------------------------
+
+
+
 
   describe("event CRUD", function () {
     it("creates and reads an event", async function () {
@@ -205,9 +205,9 @@ describe("TicketNFT", function () {
     });
   });
 
-  // ---------------------------------------------------------------------
-  // Locked fields after sales
-  // ---------------------------------------------------------------------
+
+
+
 
   describe("locked fields after the first sale", function () {
     it("locks ticketPrice, maxSupply, resaleCapBps and earlier eventTime", async function () {
@@ -239,9 +239,9 @@ describe("TicketNFT", function () {
     });
   });
 
-  // ---------------------------------------------------------------------
-  // Primary sale
-  // ---------------------------------------------------------------------
+
+
+
 
   describe("buyTicket", function () {
     it("mints sequential tickets and tracks revenue", async function () {
@@ -267,7 +267,7 @@ describe("TicketNFT", function () {
       await nft.connect(buyer1).buyTicket(1, 2, { value: PRICE * 2n });
       await expect(nft.connect(buyer1).buyTicket(1, 1, { value: PRICE }))
         .to.be.revertedWithCustomError(nft, "WalletLimitExceeded").withArgs(1, buyer1.address);
-      // The limit is per event: buying for event 2 still works.
+
       await expect(nft.connect(buyer1).buyTicket(2, 2, { value: PRICE * 2n })).to.emit(nft, "TicketPurchased");
     });
 
@@ -278,7 +278,7 @@ describe("TicketNFT", function () {
       await nft.connect(buyer2).buyTicket(1, 2, { value: PRICE * 2n });
       await expect(nft.connect(other).buyTicket(1, 2, { value: PRICE * 2n }))
         .to.be.revertedWithCustomError(nft, "SoldOut").withArgs(1);
-      await nft.connect(other).buyTicket(1, 1, { value: PRICE }); // last ticket
+      await nft.connect(other).buyTicket(1, 1, { value: PRICE });
       expect((await nft.getFunction("getEvent")(1)).sold).to.equal(5n);
     });
 
@@ -318,9 +318,9 @@ describe("TicketNFT", function () {
     });
   });
 
-  // ---------------------------------------------------------------------
-  // Gate checkers and check-in
-  // ---------------------------------------------------------------------
+
+
+
 
   describe("gate checkers", function () {
     it("lets organizer and admin assign/remove, others not", async function () {
@@ -358,7 +358,7 @@ describe("TicketNFT", function () {
 
     it("rejects a checker of another event", async function () {
       const { nft, checker2 } = await loadFixture(soldFixture);
-      // checker2 works for event 2; token 1 belongs to event 1.
+
       await expect(nft.connect(checker2).checkIn(2, 1))
         .to.be.revertedWithCustomError(nft, "WrongEvent").withArgs(1, 2);
       await expect(nft.connect(checker2).checkIn(1, 1))
@@ -398,7 +398,7 @@ describe("TicketNFT", function () {
       await expect(nft.connect(org1).revokeTicket(1)).to.be.revertedWithCustomError(nft, "TicketNotValid");
       await expect(nft.connect(admin).revokeTicket(2)).to.emit(nft, "TicketRevoked").withArgs(2, 2, admin.address);
 
-      // Holder gets the reserved refund back.
+
       await expect(nft.connect(buyer1).claimRefund(1)).to.changeEtherBalance(buyer1, PRICE);
       await expect(nft.connect(buyer2).claimRefund(2)).to.changeEtherBalance(buyer2, PRICE);
     });
@@ -407,15 +407,15 @@ describe("TicketNFT", function () {
       const { nft, params, org1, checker1, buyer1 } = await loadFixture(soldFixture);
       await nft.connect(checker1).checkIn(1, 1);
       await expect(nft.connect(org1).revokeTicket(1)).to.be.revertedWithCustomError(nft, "TicketNotValid");
-      await nft.connect(buyer1).buyTicket(1, 1, { value: PRICE }); // token 3
+      await nft.connect(buyer1).buyTicket(1, 1, { value: PRICE });
       await time.increaseTo(params.eventTime);
       await expect(nft.connect(org1).revokeTicket(3)).to.be.revertedWithCustomError(nft, "EventAlreadyStarted");
     });
   });
 
-  // ---------------------------------------------------------------------
-  // Transfers and approvals
-  // ---------------------------------------------------------------------
+
+
+
 
   describe("transfer restrictions", function () {
     it("blocks direct transfers by the holder", async function () {
@@ -469,11 +469,11 @@ describe("TicketNFT", function () {
 
     it("rejects marketplace transfers of used, revoked, canceled-event and past-event tickets", async function () {
       const { nft, params, org1, org2, buyer1, buyer2, market, checker1, other } = await loadFixture(soldFixture);
-      await nft.connect(buyer1).buyTicket(1, 1, { value: PRICE }); // token 3, event 1
+      await nft.connect(buyer1).buyTicket(1, 1, { value: PRICE });
 
-      await nft.connect(checker1).checkIn(1, 1); // token 1 used
-      await nft.connect(org1).revokeTicket(3); // token 3 revoked
-      await nft.connect(org2).cancelEvent(2); // token 2 canceled event
+      await nft.connect(checker1).checkIn(1, 1);
+      await nft.connect(org1).revokeTicket(3);
+      await nft.connect(org2).cancelEvent(2);
       for (const [from, id] of [[buyer1, 1], [buyer1, 3], [buyer2, 2]]) {
         expect(await nft.isTransferable(id)).to.equal(false);
         await expect(nft.connect(market).transferByMarketplace(from.address, other.address, id))
@@ -499,9 +499,9 @@ describe("TicketNFT", function () {
     });
   });
 
-  // ---------------------------------------------------------------------
-  // Resale views and fees
-  // ---------------------------------------------------------------------
+
+
+
 
   describe("marketplace helpers", function () {
     it("computes the resale cap and rounds down", async function () {
@@ -510,10 +510,10 @@ describe("TicketNFT", function () {
       const p = await makeParams({
         ticketPrice: 333n, resaleCapBps: 11000, saleStart: now + 10n,
       });
-      await nft.connect(org1).createEvent(p); // event 3
+      await nft.connect(org1).createEvent(p);
       await time.increaseTo(p.saleStart);
-      await nft.connect(buyer1).buyTicket(3, 1, { value: 333n }); // token 1
-      // 333 * 11000 / 10000 = 366.3 -> 366
+      await nft.connect(buyer1).buyTicket(3, 1, { value: 333n });
+
       expect(await nft.getResaleCap(1)).to.equal(366n);
       await expect(nft.getResaleCap(99)).to.be.revertedWithCustomError(nft, "TicketNotFound");
     });
@@ -538,9 +538,9 @@ describe("TicketNFT", function () {
     });
   });
 
-  // ---------------------------------------------------------------------
-  // Withdraw and refunds
-  // ---------------------------------------------------------------------
+
+
+
 
   describe("withdraw", function () {
     it("is rejected before eventTime and allowed once after", async function () {
@@ -552,7 +552,7 @@ describe("TicketNFT", function () {
       await expect(nft.connect(org1).withdraw(1)).to.changeEtherBalance(org1, PRICE + 100n);
       await expect(nft.connect(org1).withdraw(1))
         .to.be.revertedWithCustomError(nft, "NothingToWithdraw").withArgs(1);
-      // Event 2 money is untouched.
+
       expect((await nft.eventBalances(2)).revenue).to.equal(PRICE);
     });
 
@@ -581,7 +581,7 @@ describe("TicketNFT", function () {
       await nft.connect(market).receiveResaleFee(1, { value: 100n });
       await nft.connect(org1).cancelEvent(1);
       await expect(nft.connect(org1).withdraw(1)).to.changeEtherBalance(org1, 100n);
-      expect((await nft.eventBalances(1)).revenue).to.equal(PRICE); // kept for refunds
+      expect((await nft.eventBalances(1)).revenue).to.equal(PRICE);
       await expect(nft.connect(org1).withdraw(1)).to.be.revertedWithCustomError(nft, "NothingToWithdraw");
     });
   });
@@ -589,8 +589,8 @@ describe("TicketNFT", function () {
   describe("cancel + claimRefund", function () {
     it("refunds Valid and Used tickets of a canceled event and burns them", async function () {
       const { nft, org1, buyer1, checker1 } = await loadFixture(soldFixture);
-      await nft.connect(buyer1).buyTicket(1, 1, { value: PRICE }); // token 3
-      await nft.connect(checker1).checkIn(1, 3); // used
+      await nft.connect(buyer1).buyTicket(1, 1, { value: PRICE });
+      await nft.connect(checker1).checkIn(1, 3);
       await nft.connect(org1).cancelEvent(1);
 
       await expect(nft.connect(buyer1).claimRefund(1))
@@ -631,31 +631,31 @@ describe("TicketNFT", function () {
 
     it("keeps a revoked ticket's reserved refund when the event is later canceled", async function () {
       const { nft, org1, buyer1 } = await loadFixture(soldFixture);
-      await nft.connect(buyer1).buyTicket(1, 1, { value: PRICE }); // token 3
+      await nft.connect(buyer1).buyTicket(1, 1, { value: PRICE });
       await nft.connect(org1).revokeTicket(1);
       await nft.connect(org1).cancelEvent(1);
       await expect(nft.connect(buyer1).claimRefund(1)).to.changeEtherBalance(buyer1, PRICE);
       await expect(nft.connect(buyer1).claimRefund(3)).to.changeEtherBalance(buyer1, PRICE);
-      expect(await ethers.provider.getBalance(await nft.getAddress())).to.equal(PRICE); // event 2 only
+      expect(await ethers.provider.getBalance(await nft.getAddress())).to.equal(PRICE);
     });
   });
 
-  // ---------------------------------------------------------------------
-  // Reentrancy
-  // ---------------------------------------------------------------------
+
+
+
 
   describe("reentrancy", function () {
     it("blocks re-entering claimRefund from the refund callback", async function () {
       const { nft, params, org1 } = await loadFixture(deployFixture);
       const attacker = await ethers.deployContract("RefundAttacker", [await nft.getAddress()]);
       await time.increaseTo(params.saleStart);
-      await attacker.buy(1, 2, { value: PRICE * 2n }); // tokens 1 and 2
+      await attacker.buy(1, 2, { value: PRICE * 2n });
       await nft.connect(org1).cancelEvent(1);
 
       await expect(attacker.attack(1, 2)).to.changeEtherBalance(attacker, PRICE);
       expect(await attacker.reentryAttempted()).to.equal(true);
       expect(await attacker.reentrySucceeded()).to.equal(false);
-      expect(await nft.ownerOf(2)).to.equal(await attacker.getAddress()); // token 2 untouched
+      expect(await nft.ownerOf(2)).to.equal(await attacker.getAddress());
       expect((await nft.eventBalances(1)).revenue).to.equal(PRICE);
     });
 
@@ -664,8 +664,8 @@ describe("TicketNFT", function () {
       const attacker = await ethers.deployContract("WithdrawAttacker", [await nft.getAddress()]);
       await nft.connect(admin).grantRole(ORGANIZER_ROLE, await attacker.getAddress());
       const p = await makeParams();
-      await attacker.createEvent(p); // event 3
-      await attacker.createEvent(p); // event 4
+      await attacker.createEvent(p);
+      await attacker.createEvent(p);
       await time.increaseTo(p.saleStart);
       await nft.connect(buyer1).buyTicket(3, 1, { value: PRICE });
       await nft.connect(buyer1).buyTicket(4, 1, { value: PRICE });

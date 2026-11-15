@@ -2,8 +2,8 @@ import { BrowserProvider, Contract, Interface, parseEther, formatEther, isAddres
 import ticketJson from '../shared/abi/TicketNFT.json' with { type: 'json' };
 import marketJson from '../shared/abi/Marketplace.json' with { type: 'json' };
 
-// Transaksi ke TicketNFT dan Marketplace lewat wallet. Setiap transaksi disimulasikan lebih dulu (staticCall)
-// agar penolakan kontrak muncul sebagai pesan yang jelas sebelum wallet meminta persetujuan.
+
+
 export const TICKET_IFACE = new Interface(ticketJson.abi);
 export const MARKET_IFACE = new Interface(marketJson.abi);
 export const ORGANIZER_ROLE = keccakId('ORGANIZER_ROLE');
@@ -68,7 +68,7 @@ function revertData(err) {
   return null;
 }
 
-// Mengubah galat ethers/wallet menjadi pesan Indonesia yang dapat dipahami pengguna.
+
 export function explainError(err) {
   if (err instanceof OnchainError) return err.message;
   const code = err?.code ?? err?.info?.error?.code;
@@ -127,7 +127,7 @@ export async function switchChain(chainId, injected = globalThis.window?.ethereu
   }
 }
 
-// Menunggu indexer backend menyusul sampai blok transaksi (atau habis waktu). Mengembalikan true bila sudah menyusul.
+
 export async function waitForIndexer(client, blockNumber, { timeoutMs = 60_000, intervalMs = 1_500, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -156,7 +156,7 @@ export function createOnchain({ signer, ticketAddress, marketplaceAddress, onSta
       return { hash: tx.hash, blockNumber: receipt.blockNumber, receipt };
     } catch (err) { throw err instanceof OnchainError ? err : new OnchainError(explainError(err), err); }
   }
-  // Kontrak punya fungsi getEvent(uint256) yang bentrok dengan Contract.getEvent bawaan ethers; panggil lewat getFunction.
+
   const getEventInfo = (id) => ticket.getFunction('getEvent')(id);
   const read = async (fn) => { try { return await fn(); } catch (err) { throw new OnchainError(explainError(err), err); } };
 
@@ -213,6 +213,6 @@ export function createOnchain({ signer, ticketAddress, marketplaceAddress, onSta
       return { revenueWei: b.revenue, resaleFeesWei: b.resaleFees, pendingProceedsWei: proceeds };
     },
   };
-  // Semua aksi async: kesalahan validasi argumen selalu menjadi promise yang ditolak, bukan exception sinkron.
+
   return { ticket, market, ...Object.fromEntries(Object.entries(actions).map(([name, fn]) => [name, async (...args) => fn(...args)])) };
 }

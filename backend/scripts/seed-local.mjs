@@ -1,7 +1,7 @@
-// Mengisi node Hardhat lokal dengan data contoh agar indexer dan API punya data sungguhan.
-//   node scripts/seed-local.mjs chain     -> deploy kontrak, beri role, buat 2 event, beli tiket, listing resale
-//   node scripts/seed-local.mjs details   -> simpan detail off-chain kedua event lewat API (backend harus berjalan)
-// Hanya untuk node lokal (akun Hardhat bawaan yang kuncinya publik). Jangan dipakai untuk jaringan sungguhan.
+
+
+
+
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,7 +12,7 @@ import { computeDetailsHash } from '../src/api/validate.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const RPC = process.env.RPC_URL || 'http://127.0.0.1:8545';
 const API = process.env.API_URL || 'http://localhost:3001';
-const ORGANIZER = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'; // akun Hardhat #1
+const ORGANIZER = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
 
 const DETAILS = [
   { title: 'Nusa Sound Festival', description: 'Satu panggung, beragam suara untuk semua orang.', category: 'Musik', location: 'Gelora Bung Karno, Jakarta' },
@@ -38,9 +38,9 @@ async function chain() {
   await (await ticket(admin).grantRole(await ticket(admin).MARKETPLACE_ROLE(), marketAddr)).wait();
 
   const now = (await provider.getBlock('latest')).timestamp;
-  const price = 10n ** 16n; // 0,01 ETH
+  const price = 10n ** 16n;
   const base = { ticketPrice: price, maxSupply: 100, maxPerWallet: 4, saleStart: now - 10, saleEnd: now + 30 * 86400, resaleCapBps: 11000 };
-  // Event 1: hash on-chain cocok dengan detail contoh -> hashStatus "match". Event 2: hash kosong -> "unset".
+
   await (await ticket(organizer).createEvent({ ...base, eventTime: now + 31 * 86400, detailsHash: computeDetailsHash(DETAILS[0], '') })).wait();
   await (await ticket(organizer).createEvent({ ...base, eventTime: now + 45 * 86400, detailsHash: `0x${'00'.repeat(32)}` })).wait();
 

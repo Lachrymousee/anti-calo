@@ -1,6 +1,6 @@
-// Memastikan klien frontend (src/api.js) benar-benar kompatibel dengan backend asli:
-// tanda tangan wallet, header hash, upload multipart, dan izin per role.
-// Dilewati otomatis bila dependensi backend belum dipasang (cd backend && npm ci).
+
+
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -36,8 +36,8 @@ for (const mode of ['signature', 'dev']) {
     let events = await organizer.events();
     assert.equal(events.length, 2); assert.equal(events[0].detailsComplete, false); assert.equal(events[0].price, '0.000000000000001');
 
-    await organizer.saveDetails('1', DETAILS, false);                                            // POST
-    await organizer.saveDetails('1', { ...DETAILS, title: 'Nusa Sound Festival 2027' }, true);   // PUT
+    await organizer.saveDetails('1', DETAILS, false);
+    await organizer.saveDetails('1', { ...DETAILS, title: 'Nusa Sound Festival 2027' }, true);
     await assert.rejects(createApiClient({ baseUrl: b.baseUrl, wallet: wallet('buyer') }).saveDetails('1', DETAILS, true), (e) => e instanceof ApiError && e.status === 403);
     await assert.rejects(createApiClient({ baseUrl: b.baseUrl }).saveDetails('1', DETAILS, true), /Hubungkan wallet/);
 

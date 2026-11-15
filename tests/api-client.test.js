@@ -86,7 +86,7 @@ test('upload poster: hash dihitung dari isi file', async () => {
   await c.uploadPoster('1', new File([bytes], 'poster.png', { type: 'image/png' }));
   const { init } = calls.at(-1);
   assert.ok(init.body instanceof FormData); assert.equal(init.headers['x-content-sha256'], sha256Hex(bytes));
-  assert.equal(init.headers['content-type'], undefined);                                   // boundary diisi fetch sendiri
+  assert.equal(init.headers['content-type'], undefined);
 });
 
 test('menulis tanpa wallet ditolak sebelum request dikirim', async () => {

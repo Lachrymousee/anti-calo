@@ -8,3 +8,8 @@ dist/
 *.zip
 .DS_Store
 Thumbs.db
+backend/data/
+coverage/
+.kiro/
+docs/TODO-marketplace.md
+docs/PANDUAN-GITHUB.md

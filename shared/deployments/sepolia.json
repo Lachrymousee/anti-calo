@@ -1,0 +1,20 @@
+{
+  "network": "sepolia",
+  "chainId": 11155111,
+  "contracts": {
+    "TicketNFT": {
+      "address": "0x093c1D62871Ecd9b2927155Dfee71a3e87A1cD14",
+      "deployTx": "0x3a8484da61b02d737c95895d1afd1a94248bf0be6affae62bbe3bc270986a0c9",
+      "blockNumber": 12118475,
+      "deployer": "0xaE9F21b9D85978Fce4B7c64741aCE39BE36c27E0",
+      "deployedAt": "2026-11-12T11:13:26.410Z"
+    },
+    "Marketplace": {
+      "address": "0x0c11f7C21791a90F2A86A2263561417f96510cC9",
+      "deployTx": "0x274329fdc1c41181fa3225748fb752ca1071ace51bbbf7f5868b48544e56198b",
+      "deployer": "0xaE9F21b9D85978Fce4B7c64741aCE39BE36c27E0",
+      "feeBps": 500,
+      "roleGrantTx": "0xad345b2313aa887eb5ae54f0692bcd0c995d81e5416f87466b1e6c287489564c"
+    }
+  }
+}

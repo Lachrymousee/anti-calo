@@ -1,5 +1,5 @@
-// E2E Tahap 2: transaksi lewat src/onchain.js ke kontrak asli (node Hardhat lokal) -> indexer backend -> REST API.
-// Dilewati otomatis bila blockchain/ atau backend/ belum di-install (npm ci di keduanya).
+
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -23,7 +23,7 @@ async function startNode() {
   if (!fs.existsSync(path.join(support, 'node_modules'))) fs.symlinkSync(bcModules, path.join(support, 'node_modules'), 'junction');
   const child = spawn(process.execPath, [path.join(support, 'node_modules/hardhat/internal/cli/cli.js'), 'node', '--config', path.join(support, 'hardhat.e2e.config.cjs'), '--port', String(PORT)], { cwd: support, stdio: 'ignore' });
   for (let i = 0; i < 60; i += 1) {
-    try { const r = await fetch(RPC, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] }) }); if (r.ok) return child; } catch { /* belum siap */ }
+    try { const r = await fetch(RPC, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] }) }); if (r.ok) return child; } catch {                  }
     await sleep(500);
   }
   child.kill(); throw new Error('Node Hardhat tidak siap.');
@@ -38,14 +38,14 @@ test('Tahap 2: beli, resale, check-in, refund, withdraw, dan role lewat transaks
   const S = Object.fromEntries(await Promise.all(names.map(async (n, i) => [n, await provider.getSigner(i)])));
   const A = Object.fromEntries(await Promise.all(names.map(async (n) => [n, (await S[n].getAddress()).toLowerCase()])));
 
-  // --- deploy (kontrak asli) ---
+
   const art = compileContracts();
   const tk = await new ContractFactory(art.TicketNFT.abi, art.TicketNFT.bytecode, S.admin).deploy(A.admin); await tk.waitForDeployment();
   const mk = await new ContractFactory(art.Marketplace.abi, art.Marketplace.bytecode, S.admin).deploy(await tk.getAddress(), 250); await mk.waitForDeployment();
   const ticketAddress = await tk.getAddress(), marketplaceAddress = await mk.getAddress();
   await (await new Contract(ticketAddress, art.TicketNFT.abi, S.admin).grantRole(await tk.MARKETPLACE_ROLE(), marketplaceAddress)).wait();
 
-  // --- backend: DB + API + sinkronisasi indexer ---
+
   const config = { ...loadConfig({}), authMode: 'dev', chainId: 31337, ticketAddress, marketplaceAddress, startBlock: 0, confirmations: 0, batchSize: 500, reorgDepth: 4,
     uploadDir: fs.mkdtempSync(path.join(os.tmpdir(), 'anti-calo-t2-')) };
   const db = openDb(), interfaces = buildInterfaces(config);
@@ -61,13 +61,13 @@ test('Tahap 2: beli, resale, check-in, refund, withdraw, dan role lewat transaks
   const settle = async (r) => assert.equal(await waitForIndexer(indexerClient, r.blockNumber, { timeoutMs: 5000, intervalMs: 10 }), true);
   const rejects = (promise, pattern) => assert.rejects(promise, (e) => { assert.match(e.message, pattern); return true; });
 
-  // --- Admin: beri role Organizer ---
+
   await rejects(chain('outsider').grantOrganizer(A.organizer), /role yang dibutuhkan/);
   await settle(await chain('admin').grantOrganizer(A.organizer));
   assert.equal((await apiAs('admin').roles(A.organizer)).organizer, true);
   await rejects(chain('admin').grantOrganizer('bukan-alamat'), /alamat wallet yang valid/);
 
-  // --- Organizer: buat event (validasi di klien dan di kontrak) ---
+
   const now = (await provider.getBlock('latest')).timestamp;
   const base = { priceEth: '0.01', maxSupply: 50, maxPerWallet: 4, saleStart: now - 10, saleEnd: now + 3600, eventTime: now + 7200, resaleCapBps: 11000 };
   await rejects(chain('organizer').createEvent({ ...base, priceEth: '0' }), /harus lebih dari 0/);
@@ -79,7 +79,7 @@ test('Tahap 2: beli, resale, check-in, refund, withdraw, dan role lewat transaks
   const ev1 = (await apiAs('buyer').events())[0];
   assert.equal(ev1.id, '1'); assert.equal(ev1.price, '0.01'); assert.equal(ev1.organizer, A.organizer);
 
-  // --- Buyer: beli tiket (harga dibaca dari kontrak, batas per wallet ditolak) ---
+
   await rejects(chain('buyer').buyTicket('1', 5), /batas per wallet/);
   await rejects(chain('buyer').buyTicket('1', 0), /1–10/);
   await rejects(chain('buyer').buyTicket('99', 1), /Event #99 tidak ditemukan/);
@@ -88,7 +88,7 @@ test('Tahap 2: beli, resale, check-in, refund, withdraw, dan role lewat transaks
   assert.equal(mine.length, 3);
   const [tokenA, tokenB, tokenC] = mine.map((x) => x.tokenId);
 
-  // --- Resale: batas harga, beli listing sendiri ditolak, beli oleh buyer2, biaya organizer ---
+
   const quote = await chain('buyer').quoteResale(tokenA, '0.011');
   assert.equal(formatEther(quote.capWei), '0.011'); assert.equal(quote.withinCap, true); assert.equal(formatEther(quote.feeWei), '0.000275');
   assert.equal((await chain('buyer').quoteResale(tokenA, '0.012')).withinCap, false);
@@ -105,7 +105,7 @@ test('Tahap 2: beli, resale, check-in, refund, withdraw, dan role lewat transaks
   await settle(await chain('buyer').cancelListing(tokenB));
   assert.equal((await apiAs('buyer2').listings()).length, 0);
 
-  // --- Gate Checker: penugasan, check-in satu kali ---
+
   await rejects(chain('buyer').assignGateChecker('1', A.gate), /organizer pemilik event atau Admin/);
   await chain('organizer').assignGateChecker('1', A.gate);
   await rejects(chain('organizer').assignGateChecker('1', A.gate), /sudah menjadi Gate Checker/);
@@ -116,7 +116,7 @@ test('Tahap 2: beli, resale, check-in, refund, withdraw, dan role lewat transaks
   assert.equal((await apiAs('gate').tickets(A.buyer2))[0].status, 'used');
   await rejects(chain('buyer2').listTicket(tokenA, '0.01'), /tidak dapat dipindahkan/);
 
-  // --- detailsHash: detail off-chain dikunci on-chain, status menjadi "match" ---
+
   const details = { title: 'Nusa Sound Festival', description: 'Satu panggung, beragam suara untuk semua orang.', category: 'Musik', location: 'Gelora Bung Karno, Jakarta' };
   const saved = await apiAs('organizer').saveDetails('1', details, false);
   assert.equal(saved.hashStatus, 'unset');
@@ -125,7 +125,7 @@ test('Tahap 2: beli, resale, check-in, refund, withdraw, dan role lewat transaks
   await settle(await chain('organizer').updateEventHash('1', saved.computedHash));
   assert.equal((await apiAs('buyer').events())[0].hashStatus, 'match');
 
-  // --- Event kedua: pencabutan tiket oleh organizer dan refund; pembatalan event dan refund ---
+
   const now2 = (await provider.getBlock('latest')).timestamp;
   const e2 = await chain('organizer').createEvent({ ...base, saleStart: now2 - 10, saleEnd: now2 + 3600, eventTime: now2 + 7200 });
   await chain('buyer').buyTicket(e2.eventId, 2);
@@ -139,8 +139,8 @@ test('Tahap 2: beli, resale, check-in, refund, withdraw, dan role lewat transaks
   await rejects(chain('buyer').listTicket(t2[0], '0.01'), /tidak dapat dipindahkan/);
   const before = await provider.getBalance(A.buyer);
   await settle(await chain('buyer').claimRefund(t2[0]));
-  assert.ok((await provider.getBalance(A.buyer)) > before - 10n ** 15n);              // refund 0.01 ETH dikurangi gas
-  assert.equal((await (await fetch(`${baseUrl}/api/tickets/${t2[0]}`)).json()).status, 'burned');   // dibakar: pemilik menjadi alamat nol, tidak lagi di daftar wallet
+  assert.ok((await provider.getBalance(A.buyer)) > before - 10n ** 15n);
+  assert.equal((await (await fetch(`${baseUrl}/api/tickets/${t2[0]}`)).json()).status, 'burned');
   assert.equal((await apiAs('buyer').tickets(A.buyer)).some((x) => x.tokenId === t2[0]), false);
   await settle(await chain('organizer').cancelEvent(e2.eventId));
   assert.equal((await apiAs('buyer').events()).find((e) => e.id === e2.eventId).status, 'cancelled');
@@ -148,7 +148,7 @@ test('Tahap 2: beli, resale, check-in, refund, withdraw, dan role lewat transaks
   await settle(await chain('buyer2').claimRefund(t2b2[0]));
   await rejects(chain('organizer').cancelEvent(e2.eventId), /tidak aktif/);
 
-  // --- Penarikan dana: ditolak sebelum event, berhasil sesudahnya (organizer: pendapatan + fee resale; penjual: hasil resale) ---
+
   await rejects(chain('organizer').withdraw('1'), /setelah event dimulai/);
   await provider.send('evm_increaseTime', [8000]); await provider.send('evm_mine', []);
   await rejects(chain('outsider').withdraw('1'), /organizer pemilik event/);
@@ -162,7 +162,7 @@ test('Tahap 2: beli, resale, check-in, refund, withdraw, dan role lewat transaks
   await rejects(chain('buyer').withdrawProceeds(), /Tidak ada hasil penjualan/);
   await rejects(chain('organizer').cancelEvent('1'), /sudah dimulai/);
 
-  // --- Admin mencabut role Organizer: transaksi organizer ditolak dan API ikut berubah ---
+
   await settle(await chain('admin').revokeOrganizer(A.organizer));
   assert.equal((await apiAs('admin').roles(A.organizer)).organizer, false);
   await rejects(chain('organizer').createEvent(base), /role yang dibutuhkan/);

@@ -21,7 +21,7 @@ const writeParams = (db, eventId, p, block) =>
     .run(p.ticketPrice, Number(p.maxSupply), Number(p.maxPerWallet), Number(p.saleStart), Number(p.saleEnd),
       Number(p.eventTime), Number(p.resaleCapBps), low(p.detailsHash), block, eventId);
 
-// Setiap handler menerima (db, args, meta) dan hanya mengubah tabel proyeksi.
+
 const HANDLERS = {
   RoleGranted(db, a) {
     db.prepare(`INSERT INTO roles (role, account, active) VALUES (?, ?, 1)
@@ -58,7 +58,7 @@ const HANDLERS = {
   },
   TicketCheckedIn(db, a, m) {
     const t = needTicket(db, a.tokenId);
-    if (t.status === 'used') return; // log ganda tidak boleh menambah penghitung
+    if (t.status === 'used') return;
     db.prepare(`UPDATE tickets SET status='used', checked_in_by=?, checked_in_block=? WHERE token_id=?`)
       .run(low(a.checker), m.blockNumber, String(a.tokenId));
     db.prepare('UPDATE events SET checked_in = checked_in + 1, updated_block = ? WHERE event_id = ?').run(m.blockNumber, String(a.eventId));
@@ -97,7 +97,7 @@ const HANDLERS = {
   },
 };
 
-// Dicatat di chain_events untuk jejak audit, tanpa proyeksi.
+
 const AUDIT_ONLY = new Set(['RevenueWithdrawn', 'ResaleFeeReceived', 'ProceedsWithdrawn']);
 
 export const isTracked = (name) => name in HANDLERS || AUDIT_ONLY.has(name);
@@ -107,7 +107,7 @@ function project(db, ev) {
   if (handler) handler(db, ev.args, { blockNumber: ev.blockNumber }, ev.id);
 }
 
-// Dipanggil di dalam transaksi pemanggil. Idempoten: log yang sudah ada dilewati.
+
 export function insertAndProject(db, ev) {
   const r = db.prepare(`INSERT OR IGNORE INTO chain_events (id, block_number, log_index, tx_hash, block_hash, contract, name, args)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -125,7 +125,7 @@ export function applyEvents(db, events) {
 const fromRow = (r) => ({ id: r.id, blockNumber: r.block_number, logIndex: r.log_index, txHash: r.tx_hash,
   blockHash: r.block_hash, contract: r.contract, name: r.name, args: JSON.parse(r.args) });
 
-// Membangun ulang semua tabel proyeksi dari chain_events. Data off-chain tidak disentuh.
+
 export function rebuild(db) {
   return tx(db, () => {
     for (const t of PROJECTION_TABLES) db.exec(`DELETE FROM ${t}`);
@@ -135,7 +135,7 @@ export function rebuild(db) {
   });
 }
 
-// Menangani reorg: buang log pada blok > blockNumber lalu bangun ulang proyeksi.
+
 export function rewindTo(db, blockNumber) {
   return tx(db, () => {
     const r = db.prepare('DELETE FROM chain_events WHERE block_number > ?').run(blockNumber);

@@ -40,7 +40,7 @@ export function createApp({ db, config, now = () => Math.floor(Date.now() / 1000
   app.use(express.json({ limit: '64kb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
   app.use(createAuth(config));
 
-  // ---------- helpers data ----------
+
   const eventRow = (id) => db.prepare('SELECT * FROM events WHERE event_id = ?').get(id);
   const needEvent = (id) => { const e = eventRow(id); if (!e) throw notFound('Event tidak ditemukan atau belum terindeks.'); return e; };
   const detailsRow = (id) => db.prepare('SELECT * FROM event_details WHERE event_id = ?').get(id);
@@ -61,7 +61,7 @@ export function createApp({ db, config, now = () => Math.floor(Date.now() / 1000
     detailsHash: ev.details_hash, details: serializeDetails(ev, d),
   });
 
-  // ---------- umum ----------
+
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
   app.get('/api/status', (_req, res) => {
@@ -71,7 +71,7 @@ export function createApp({ db, config, now = () => Math.floor(Date.now() / 1000
       updatedAt: getState(db, 'updated_at'), authMode: config.authMode });
   });
 
-  // Alamat kontrak dan chain yang diindeks; frontend memakainya untuk mengirim transaksi ke kontrak yang sama.
+
   app.get('/api/config', (_req, res) => {
     res.json({ chainId: config.chainId, ticketAddress: config.ticketAddress || null, marketplaceAddress: config.marketplaceAddress || null,
       confirmations: config.confirmations });
@@ -88,13 +88,13 @@ export function createApp({ db, config, now = () => Math.floor(Date.now() / 1000
     });
   });
 
-  // Hitung detailsHash sebelum createEvent on-chain (tanpa login; fungsi murni).
+
   app.post('/api/details/hash', (req, res) => {
     const d = parseDetails(req.body);
     res.json({ detailsHash: computeDetailsHash(d, ''), note: 'Hash tanpa poster. Setelah upload poster, hash berubah; panggil updateEvent dengan computedHash terbaru.' });
   });
 
-  // ---------- event (data on-chain terindeks + detail off-chain) ----------
+
   app.get('/api/events', (req, res) => {
     const { limit, offset, page } = paging(req.query);
     const where = []; const args = [];
@@ -121,7 +121,7 @@ export function createApp({ db, config, now = () => Math.floor(Date.now() / 1000
     res.json({ ...serializeEvent(ev, detailsRow(id)), gateCheckers: checkers });
   });
 
-  // ---------- CRUD detail event (off-chain) ----------
+
   app.get('/api/events/:id/details', (req, res) => {
     const id = parseId(req.params.id, 'ID event');
     const ev = needEvent(id);
@@ -161,7 +161,7 @@ export function createApp({ db, config, now = () => Math.floor(Date.now() / 1000
     res.json(serializeDetails(ev, detailsRow(id)));
   });
 
-  // Soft delete. Organizer pemilik event atau Admin (moderasi). Riwayat blockchain tidak terpengaruh.
+
   app.delete('/api/events/:id/details', (req, res) => {
     const wallet = requireWallet(req);
     const id = parseId(req.params.id, 'ID event');
@@ -202,7 +202,7 @@ export function createApp({ db, config, now = () => Math.floor(Date.now() / 1000
       res.status(201).json(serializeDetails(ev, detailsRow(id)));
     });
 
-  // ---------- tiket, listing, laporan (proyeksi on-chain, baca-saja) ----------
+
   const serializeTicket = (t) => ({ tokenId: t.token_id, eventId: t.event_id, owner: t.owner, status: t.status,
     originalPrice: t.original_price, checkedInBy: t.checked_in_by, checkedInBlock: t.checked_in_block });
 
@@ -231,7 +231,7 @@ export function createApp({ db, config, now = () => Math.floor(Date.now() / 1000
     const where = ['l.active = 1']; const args = [];
     if (req.query.eventId) { where.push('l.event_id = ?'); args.push(parseId(req.query.eventId, 'eventId')); }
     if (req.query.seller) { where.push('l.seller = ?'); args.push(lowAddr(req.query.seller, 'seller')); }
-    // buyable=1 menyaring listing basi: tiket tidak valid, event batal/mulai, atau pemilik berubah.
+
     if (req.query.buyable === '1') {
       where.push("t.status = 'valid' AND e.status = 'active' AND e.event_time > ? AND t.owner = l.seller");
       args.push(now());
@@ -263,9 +263,9 @@ export function createApp({ db, config, now = () => Math.floor(Date.now() / 1000
     });
   });
 
-  // ---------- error handling ----------
+
   app.use('/api', (_req, _res, next) => next(notFound('Endpoint tidak ditemukan.')));
-  // eslint-disable-next-line no-unused-vars
+
   app.use((err, _req, res, _next) => {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.code, message: err.message });
     if (err?.type === 'entity.parse.failed') return res.status(400).json({ error: 'bad_request', message: 'JSON tidak valid.' });

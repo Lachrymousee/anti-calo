@@ -1,7 +1,7 @@
 import { id as keccakId, toUtf8Bytes, keccak256 } from 'ethers';
 import { bad } from './errors.js';
 
-// Samakan dengan CATEGORIES di src/model.js (tanpa 'Semua').
+
 export const CATEGORIES = ['Musik', 'Seni & budaya', 'Teknologi', 'Lifestyle'];
 const FIELDS = ['title', 'description', 'category', 'location'];
 const CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
@@ -28,9 +28,9 @@ export function parseDetails(body) {
   return out;
 }
 
-// Hash komitmen yang disimpan organizer di EventParams.detailsHash (on-chain).
-// keccak256(JSON dengan urutan key tetap). Poster diwakili sha256 isi file agar tidak bisa
-// ditukar diam-diam. Jika belum ada poster, posterSha256 = "".
+
+
+
 export function computeDetailsHash(d, posterSha256 = '') {
   const canonical = JSON.stringify({ v: 1, title: d.title, description: d.description, category: d.category,
     location: d.location, posterSha256: posterSha256 || '' });

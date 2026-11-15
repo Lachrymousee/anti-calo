@@ -2,9 +2,9 @@ import { el, badge, button, field, money } from './ui.js';
 import { toUnix } from './onchain.js';
 import { weiToEth } from './api.js';
 
-// Kontrol transaksi on-chain untuk halaman Lab Backend. Semua kontrol memanggil ctx.run(label, (chain) => ...),
-// yang menangani status transaksi, galat, dan menunggu indexer. Kontrak tetap menjadi penentu akhir izin;
-// pengecekan di sini hanya menyembunyikan tombol yang pasti ditolak agar tampilan tidak menyesatkan.
+
+
+
 const row = (...children) => el('div', { class: 'backend-actions' }, ...children);
 
 export function localInput(date) {

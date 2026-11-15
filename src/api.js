@@ -1,6 +1,6 @@
 import { BrowserProvider, sha256, toUtf8Bytes } from 'ethers';
 
-// Alamat backend (backend/). Kosong = fitur backend nonaktif dan website tetap berjalan seperti sebelumnya.
+
 export const API_URL = String(import.meta.env?.VITE_API_URL ?? '').trim().replace(/\/+$/, '');
 export const hasApi = () => API_URL !== '';
 export const CATEGORIES = ['Musik', 'Seni & budaya', 'Teknologi', 'Lifestyle'];
@@ -11,7 +11,7 @@ export class ApiError extends Error {
 
 export const sha256Hex = (data) => sha256(typeof data === 'string' ? toUtf8Bytes(data) : data).slice(2);
 
-// Pesan yang ditandatangani wallet. Harus identik dengan authMessage() di backend/src/api/auth.js.
+
 export function authMessage({ method, path, timestamp, contentSha256 }) {
   return `anti-calo-auth\nmethod:${method.toUpperCase()}\npath:${path}\ntimestamp:${timestamp}\ncontent-sha256:${contentSha256 || '-'}`;
 }
@@ -22,7 +22,7 @@ export function weiToEth(wei) {
   return fraction ? `${v / base}.${fraction}` : String(v / base);
 }
 
-// Backend menyimpan satu field "location"; frontend memisahkan venue dan kota ("Venue, Kota").
+
 export function splitLocation(location = '') {
   const i = location.lastIndexOf(',');
   return i < 0 ? { venue: location.trim(), city: '' } : { venue: location.slice(0, i).trim(), city: location.slice(i + 1).trim() };
@@ -60,7 +60,7 @@ export function createApiClient({ baseUrl = API_URL, fetchImpl = (...a) => globa
   async function authHeaders(method, path, payload, file) {
     if (!wallet) throw Error('Hubungkan wallet terlebih dahulu.');
     authMode ??= (await request('GET', '/api/status')).authMode;
-    if (authMode === 'dev') return { 'x-wallet-address': wallet.address };   // backend lokal tanpa tanda tangan
+    if (authMode === 'dev') return { 'x-wallet-address': wallet.address };
     const signedPath = new URL(`${baseUrl}${path}`).pathname;
     const contentSha256 = file ? sha256Hex(new Uint8Array(await file.arrayBuffer())) : typeof payload === 'string' ? sha256Hex(payload) : '';
     const timestamp = now();

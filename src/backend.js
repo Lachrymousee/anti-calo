@@ -12,8 +12,8 @@ const HASH_BADGE = {
   missing: ['Detail belum diisi', 'neutral'],
 };
 
-// Halaman "Lab Backend": membaca event, tiket, dan listing dari backend (indexer) serta memungkinkan
-// Organizer menyimpan detail off-chain. Pembelian dan check-in marketplace tetap mode demo.
+
+
 export function createBackendPage({ initialWallet = null, onWalletConnected = () => {}, injected = globalThis.window?.ethereum,
   baseUrl = API_URL, createClient, makeOnchain, chain = {}, now = () => Math.floor(Date.now() / 1000) } = {}) {
   const connect = chain.connectInjectedWallet ?? connectInjectedWallet;
@@ -55,7 +55,7 @@ export function createBackendPage({ initialWallet = null, onWalletConnected = ()
   const ctx = () => ({ wallet, roles, cfg, chainOk: chainOk(), now, run, sameAddress, created: (id) => { pendingEdit = id; } });
 
   function setTx(message, hash) { txInfo = message ? { message, hash } : null; drawTx(); }
-  // Satu transaksi pada satu waktu: simulasi, persetujuan wallet, konfirmasi, lalu menunggu indexer menyusul.
+
   async function run(label, fn) {
     if (txBusy) { error.textContent = 'Masih ada transaksi yang berjalan. Tunggu sampai selesai.'; return; }
     txBusy = true; error.textContent = '';

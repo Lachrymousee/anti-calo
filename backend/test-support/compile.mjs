@@ -8,7 +8,7 @@ const bc = path.resolve(here, '../../blockchain');
 const require = createRequire(import.meta.url);
 const solc = require('solc');
 
-// Mengompilasi TicketNFT dan Marketplace dengan pengaturan yang sama seperti blockchain/hardhat.config.js.
+
 export function compileContracts() {
   const sources = {};
   for (const n of ['TicketNFT', 'Marketplace']) sources[`contracts/${n}.sol`] = { content: fs.readFileSync(path.join(bc, 'contracts', `${n}.sol`), 'utf8') };

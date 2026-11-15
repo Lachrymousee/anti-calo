@@ -18,10 +18,13 @@
   },
   "dependencies": {
     "ethers": "6.17.0",
-    "express": "4.21.2",
-    "multer": "2.0.2"
+    "express": "4.22.3",
+    "multer": "2.5.0"
   },
   "devDependencies": {
     "solc": "0.8.28"
+  },
+  "overrides": {
+    "tmp": "0.2.7"
   }
 }

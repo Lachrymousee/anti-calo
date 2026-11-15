@@ -1,5 +1,4 @@
-// Konfigurasi dibaca dari environment. Semua nilai bersifat publik kecuali yang tidak ada di sini:
-// backend ini tidak pernah membutuhkan private key.
+
 const int = (v, d) => (v === undefined || v === '' ? d : Number.parseInt(v, 10));
 
 export function loadConfig(env = process.env) {

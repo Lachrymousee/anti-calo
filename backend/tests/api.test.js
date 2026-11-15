@@ -54,14 +54,14 @@ test('GET event publik: data on-chain terindeks, detail off-chain null sebelum d
 test('CRUD detail event: izin per role, validasi, soft delete, buat ulang', async (t) => {
   const s = await setup(); t.after(s.close);
   const url = `${s.base}/api/events/1/details`;
-  assert.equal((await call(url, json(null, GOOD))).status, 401);               // tanpa login
-  for (const who of ['buyer', 'gate', 'other', 'admin']) {                      // role lain tidak boleh membuat
+  assert.equal((await call(url, json(null, GOOD))).status, 401);
+  for (const who of ['buyer', 'gate', 'other', 'admin']) {
     assert.equal((await call(url, json(who, GOOD))).status, 403, who);
   }
   const created = await call(url, json('organizer', GOOD));
   assert.equal(created.status, 201); assert.equal(created.body.title, GOOD.title);
-  assert.equal((await call(url, json('organizer', GOOD))).status, 409);        // duplikat
-  assert.equal((await call(`${s.base}/api/events/2/details`, json('organizer', GOOD))).status, 201); // organizer sama, event lain miliknya
+  assert.equal((await call(url, json('organizer', GOOD))).status, 409);
+  assert.equal((await call(`${s.base}/api/events/2/details`, json('organizer', GOOD))).status, 201);
   const bad = await call(`${s.base}/api/events/1/details`, withMethod('PUT', json('organizer', { ...GOOD, category: 'Olahraga' })));
   assert.equal(bad.status, 400);
   assert.equal((await call(url, withMethod('PUT', json('organizer', { ...GOOD, extra: 1 })))).status, 400);
@@ -73,10 +73,10 @@ test('CRUD detail event: izin per role, validasi, soft delete, buat ulang', asyn
   assert.equal((await call(url)).body.title, 'Nusa Sound Festival 2026');
   const list = await call(`${s.base}/api/events?category=Musik&q=nusa`);
   assert.equal(list.body.total, 2);
-  assert.equal((await call(url, { method: 'DELETE', headers: dev('admin') })).status, 204);  // moderasi Admin
+  assert.equal((await call(url, { method: 'DELETE', headers: dev('admin') })).status, 204);
   assert.equal((await call(url)).status, 404);
   assert.equal((await call(`${s.base}/api/events/1`)).body.details, null);
-  assert.equal((await call(url, json('organizer', GOOD))).status, 201);                       // dapat dibuat ulang
+  assert.equal((await call(url, json('organizer', GOOD))).status, 201);
 });
 
 test('organizer yang role-nya dicabut tidak dapat mengubah detail event', async (t) => {
@@ -103,12 +103,12 @@ test('detailsHash: unset / match / mismatch terhadap komitmen on-chain', async (
 test('upload poster: hanya gambar valid, batas ukuran, izin, dan hash ikut berubah', async (t) => {
   const s = await setup(); t.after(s.close);
   const url = `${s.base}/api/events/1/poster`;
-  assert.equal((await call(url, upload('organizer', PNG))).status, 404);       // detail belum ada
+  assert.equal((await call(url, upload('organizer', PNG))).status, 404);
   await call(`${s.base}/api/events/1/details`, json('organizer', GOOD));
   assert.equal((await call(url, upload('buyer', PNG))).status, 403);
   assert.equal((await call(url, upload('organizer', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'), 'image/svg+xml', 'x.svg'))).status, 400);
-  assert.equal((await call(url, upload('organizer', Buffer.from('bukan gambar'), 'image/png', 'x.png'))).status, 400); // Content-Type bohong
-  assert.equal((await call(url, upload('organizer', Buffer.concat([PNG, Buffer.alloc(5000)])))).status, 400);          // > 4096
+  assert.equal((await call(url, upload('organizer', Buffer.from('bukan gambar'), 'image/png', 'x.png'))).status, 400);
+  assert.equal((await call(url, upload('organizer', Buffer.concat([PNG, Buffer.alloc(5000)])))).status, 400);
   const before = (await call(`${s.base}/api/events/1/details`)).body.computedHash;
   const ok = await call(url, upload('organizer', PNG, 'image/png', '../../evil.png'));
   assert.equal(ok.status, 201);
@@ -117,7 +117,7 @@ test('upload poster: hanya gambar valid, batas ukuran, izin, dan hash ikut berub
   const file = await fetch(`${s.base}${ok.body.posterUrl}`);
   assert.equal(file.status, 200); assert.equal(file.headers.get('x-content-type-options'), 'nosniff');
   assert.deepEqual(Buffer.from(await file.arrayBuffer()), PNG);
-  const second = await call(url, upload('organizer', PNG2));                   // poster lama dihapus
+  const second = await call(url, upload('organizer', PNG2));
   assert.equal(fs.readdirSync(s.uploadDir).length, 1);
   assert.notEqual(second.body.posterUrl, ok.body.posterUrl);
   assert.equal(fs.readdirSync(s.uploadDir)[0], second.body.posterUrl.split('/').pop());
@@ -148,7 +148,7 @@ test('tiket, listing (stale vs buyable), dan laporan', async (t) => {
   assert.deepEqual(role.body.gateCheckerEventIds, ['1']);
 });
 
-// ----- mode signature -----
+
 const signed = async (s, wallet, method, p, { body, file, ts = Math.floor(Date.now() / 1000), shaOverride } = {}) => {
   const raw = body !== undefined ? Buffer.from(JSON.stringify(body)) : file;
   const sha = shaOverride ?? (raw ? sha256Hex(raw) : '');
@@ -164,12 +164,12 @@ const signed = async (s, wallet, method, p, { body, file, ts = Math.floor(Date.n
 test('AUTH_MODE=signature: tanda tangan valid, replay, body diganti, kedaluwarsa, penanda tangan salah', async (t) => {
   const s = await setup({ authMode: 'signature' }); t.after(s.close);
   const p = '/api/events/1/details';
-  assert.equal((await call(`${s.base}${p}`, json('organizer', GOOD))).status, 401);          // header dev diabaikan
+  assert.equal((await call(`${s.base}${p}`, json('organizer', GOOD))).status, 401);
   const ok = await signed(s, wallets.organizer, 'POST', p, { body: GOOD });
   assert.equal((await call(`${s.base}${p}`, ok.init)).status, 201);
-  assert.equal((await call(`${s.base}${p}`, ok.init)).status, 401);                          // replay ditolak
+  assert.equal((await call(`${s.base}${p}`, ok.init)).status, 401);
   const sw = await signed(s, wallets.organizer, 'PUT', p, { body: GOOD });
-  sw.init.body = Buffer.from(JSON.stringify({ ...GOOD, title: 'Judul disusupi' }));          // body diganti MITM
+  sw.init.body = Buffer.from(JSON.stringify({ ...GOOD, title: 'Judul disusupi' }));
   assert.equal((await call(`${s.base}${p}`, sw.init)).status, 401);
   const old = await signed(s, wallets.organizer, 'PUT', p, { body: GOOD, ts: Math.floor(Date.now() / 1000) - 4000 });
   assert.equal((await call(`${s.base}${p}`, old.init)).status, 401);
@@ -177,9 +177,9 @@ test('AUTH_MODE=signature: tanda tangan valid, replay, body diganti, kedaluwarsa
   assert.equal((await call(`${s.base}${p}`, nosha.init)).status, 401);
   const wrong = await signed(s, wallets.buyer, 'PUT', p, { body: GOOD });
   wrong.init.headers.authorization = wrong.init.headers.authorization.replace(wallets.buyer.address, wallets.organizer.address);
-  assert.equal((await call(`${s.base}${p}`, wrong.init)).status, 401);                      // alamat tidak cocok
+  assert.equal((await call(`${s.base}${p}`, wrong.init)).status, 401);
   const other = await signed(s, wallets.buyer, 'PUT', p, { body: GOOD });
-  assert.equal((await call(`${s.base}${p}`, other.init)).status, 403);                       // valid tetapi bukan organizer
+  assert.equal((await call(`${s.base}${p}`, other.init)).status, 403);
   const up = await signed(s, wallets.organizer, 'POST', '/api/events/1/poster', { file: PNG });
   assert.equal((await call(`${s.base}/api/events/1/poster`, up.init)).status, 201);
   const up2 = await signed(s, wallets.organizer, 'POST', '/api/events/1/poster', { file: PNG2, shaOverride: sha256Hex(PNG) });
@@ -193,7 +193,7 @@ test('GET /api/config memberi chain dan alamat kontrak (tanpa rahasia)', async (
   const r = await call(`${s.base}/api/config`);
   assert.equal(r.status, 200);
   assert.deepEqual(Object.keys(r.body).sort(), ['chainId', 'confirmations', 'marketplaceAddress', 'ticketAddress']);
-  assert.equal(r.body.ticketAddress, null);                       // belum diisi pada konfigurasi tes
+  assert.equal(r.body.ticketAddress, null);
 });
 
 test('konfigurasi: AUTH_MODE=dev ditolak pada production', () => {

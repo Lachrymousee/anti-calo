@@ -11,7 +11,7 @@ export function loadInterface(name, abiDir = ABI_DIR) {
   return new Interface(json.abi ?? json);
 }
 
-// Mengubah hasil decode ethers menjadi objek biasa: bigint -> string desimal, address -> huruf kecil.
+
 function plain(param, value) {
   if (param.baseType === 'tuple') return Object.fromEntries(param.components.map((c, i) => [c.name, plain(c, value[i])]));
   if (param.baseType === 'array') return Array.from(value, (v) => plain(param.arrayChildren, v));

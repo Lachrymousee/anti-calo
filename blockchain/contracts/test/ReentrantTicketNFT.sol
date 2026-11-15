@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {ITicketNFT} from "../ITicketNFT.sol";
 
-/// @dev TEST ONLY. Calls back into Marketplace during its transfer interaction.
+
 contract ReentrantTicketNFT is ITicketNFT {
     address public marketplace;
     bool public callbackAttempted;

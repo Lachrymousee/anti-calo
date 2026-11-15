@@ -19,9 +19,9 @@ function seedChain() {
   const c = new FakeChain();
   emit.admin(c, 1); emit.organizerRole(c, 1);
   emit.eventCreated(c, 2); emit.assigned(c, 2);
-  emit.purchased(c, 3, 1n, 1n, 3n);            // token 1..3 -> buyer
+  emit.purchased(c, 3, 1n, 1n, 3n);
   emit.listed(c, 4, 1n, 1100n);
-  emit.sold(c, 5, 1n, 1100n, 110n);            // token 1 -> buyer2
+  emit.sold(c, 5, 1n, 1100n, 110n);
   emit.checkedIn(c, 6, 2n);
   c.head = 10;
   return c;
@@ -48,7 +48,7 @@ test('sinkronisasi idempoten dan checkpoint mengikuti confirmations', async () =
   assert.equal(again.processed, 0);
   assert.deepEqual(snapshot(db), before);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM chain_events').get().n, 8);
-  assert.equal(Number(db.prepare("SELECT value FROM sync_state WHERE key='last_block'").get().value), 8); // head 10 - 2
+  assert.equal(Number(db.prepare("SELECT value FROM sync_state WHERE key='last_block'").get().value), 8);
 });
 
 test('log yang belum cukup konfirmasi tidak diproses', async () => {
@@ -70,8 +70,8 @@ test('reorg: checkpoint mundur dan data dibangun ulang dari chain baru', async (
   const db = openDb(); const c = seedChain();
   await run(db, c);
   assert.equal(db.prepare('SELECT owner FROM tickets WHERE token_id = ?').get('1').owner, addr('buyer2'));
-  c.reorgFrom(5);                                  // resale (blok 5) dan check-in (blok 6) hilang dari chain
-  emit.checkedIn(c, 7, 3n); c.head = 10;           // chain baru: token 3 check-in
+  c.reorgFrom(5);
+  emit.checkedIn(c, 7, 3n); c.head = 10;
   const r = await run(db, c);
   assert.ok(r.rewound > 0);
   assert.equal(db.prepare('SELECT owner FROM tickets WHERE token_id = ?').get('1').owner, addr('buyer'));

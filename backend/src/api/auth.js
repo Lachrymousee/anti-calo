@@ -9,15 +9,15 @@ export const ORGANIZER_ROLE = keccakId('ORGANIZER_ROLE');
 export const sha256Hex = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const clean = (h) => String(h ?? '').trim().toLowerCase().replace(/^0x/, '');
 
-// Pesan yang ditandatangani wallet untuk setiap request bertanda tangan.
-// Header: Authorization: AntiCalo <address>:<timestamp>:<signature>
-//         x-content-sha256: sha256 hex dari body JSON / file (wajib untuk POST/PUT).
+
+
+
 export function authMessage({ method, path, timestamp, contentSha256 }) {
   return `anti-calo-auth\nmethod:${method.toUpperCase()}\npath:${path}\ntimestamp:${timestamp}\ncontent-sha256:${contentSha256 || '-'}`;
 }
 
 export function createAuth(config) {
-  const seen = new Map(); // signature -> kedaluwarsa (anti replay dalam jendela TTL; per proses)
+  const seen = new Map();
 
   function sweep(now) {
     for (const [k, exp] of seen) if (exp <= now) seen.delete(k);
@@ -78,8 +78,8 @@ const hasRole = (db, role, account) =>
 export const isAdmin = (db, account) => hasRole(db, ADMIN_ROLE, account);
 export const isOrganizerRole = (db, account) => hasRole(db, ORGANIZER_ROLE, account);
 
-// Pemilik event = organizer yang tercatat on-chain DAN masih memegang ORGANIZER_ROLE
-// (sama dengan aturan TicketNFT._requireEventOrganizer).
+
+
 export function assertEventOrganizer(db, event, account) {
   if (event.organizer !== account || !isOrganizerRole(db, account)) {
     throw forbidden('Hanya organizer pemilik event ini yang dapat melakukan tindakan tersebut.');

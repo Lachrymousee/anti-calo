@@ -1,0 +1,47 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - path: ./backend/.env.example
+        required: true
+      - path: ./backend/.env
+        required: false
+    environment:
+      DB_FILE: /app/backend/data/anti-calo-sepolia.db
+      UPLOAD_DIR: /app/backend/data/uploads
+      PORT: "3001"
+    ports:
+      - "3001:3001"
+    volumes:
+      - backend-data:/app/backend/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3001/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:3001}
+      VITE_CHAIN_ID: ${VITE_CHAIN_ID:-11155111}
+      VITE_CONTRACT_ADDRESS: ${VITE_CONTRACT_ADDRESS:-0x093c1D62871Ecd9b2927155Dfee71a3e87A1cD14}
+    ports:
+      - "5173:5173"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  backend-data:

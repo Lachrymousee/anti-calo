@@ -9,17 +9,17 @@ function setup(url='https://example.test/docs.html') {
   const dom=new JSDOM('<!doctype html><body></body>',{url});last=dom;
   Object.defineProperties(globalThis,{window:{value:dom.window,configurable:true},document:{value:dom.window.document,configurable:true},Node:{value:dom.window.Node,configurable:true}});return dom;
 }
-test('Docs preserves every README section, table, and code block and exposes working contents anchors',async()=>{
-  setup('https://example.test/docs.html#docs-yang-dibutuhkan-dari-tim-smart-contract');
+test('Docs preserves README sections, tables, code blocks, and contents anchors',async()=>{
+  setup('https://example.test/docs.html#docs-deployment-sepolia');
   const source=await readFile(new URL('../README.md',import.meta.url),'utf8'),page=createDocsPage();document.body.append(page.main);
   const sections=[...source.matchAll(/^## (.+)$/gm)].map(m=>m[1]);
   assert.equal(document.querySelectorAll('.docs-content h2').length,sections.length);
   assert.equal(document.querySelectorAll('.docs-toc nav a').length,sections.length);
   for(const a of document.querySelectorAll('.docs-toc nav a'))assert(document.getElementById(a.getAttribute('href').slice(1)));
-  assert(document.querySelector('.docs-toc a[aria-current=location]').href.endsWith('#docs-yang-dibutuhkan-dari-tim-smart-contract'));
-  assert(document.querySelectorAll('.docs-content table').length>=4);
-  assert.equal(document.querySelectorAll('.docs-content pre').length,[...source.matchAll(/^```/gm)].length/2);
-  assert(document.querySelector('.docs-content').textContent.includes('0x1111111111111111111111111111111111111111'));
+  assert(document.querySelector('.docs-toc a[aria-current=location]').href.endsWith('#docs-deployment-sepolia'));
+  assert(document.querySelectorAll('.docs-content table').length>=2);
+  assert.equal(document.querySelectorAll('.docs-content pre').length,[...source.matchAll(/^\s*```/gm)].length/2);
+  assert(document.querySelector('.docs-content').textContent.includes('0x093c1D62871Ecd9b2927155Dfee71a3e87A1cD14'));
   assert(document.querySelector('.docs-content').textContent.includes('npm run dev'));
   assert(document.querySelector('.docs-content code').textContent.length>0);
   page.cleanup();

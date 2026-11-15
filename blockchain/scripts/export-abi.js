@@ -1,7 +1,5 @@
-// Copies compiled ABIs to ../shared/abi/<Name>.json for frontend/backend/indexer.
-// Exports TicketNFT and Marketplace. A contract is skipped (with a notice) only while its
-// source file does not exist yet; if the source exists but the artifact is missing, it fails.
-// Usage (from blockchain/): npm run export-abi
+
+
 const fs = require("fs");
 const path = require("path");
 

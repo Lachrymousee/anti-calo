@@ -139,7 +139,7 @@ test('Gate Checker: check-in hanya untuk event penugasannya', async () => {
 test('Admin: beri dan cabut role Organizer, cabut tiket', async () => {
   const s = setup({ wallet: { address: ADMIN, chainId: 31337 }, roles: role({ admin: true }) }); await sleep();
   set('backend-role-address', ORG); await click('backend-grant');
-  set('backend-role-address', ORG); await click('backend-revoke');                // formulir dikosongkan setelah data dimuat ulang
+  set('backend-role-address', ORG); await click('backend-revoke');
   set('backend-revoke-token', '9'); await click('backend-revoketicket');
   assert.deepEqual(s.calls, [['grantOrganizer', ORG], ['revokeOrganizer', ORG], ['revokeTicket', '9']]);
   assert(q('backend-cancel-1'), 'Admin dapat membatalkan event');

@@ -108,7 +108,7 @@ export async function switchToSepolia(injected = globalThis.window?.ethereum) {
   await requireSepolia(injected);
 }
 
-// Fungsi ERC-721 standar dapat dibaca tanpa menebak ABI bisnis marketplace.
+
 export async function readOnchainTicket({ contract, tokenId, injected = globalThis.window?.ethereum }) {
   const address = normalizeContract(contract), id = normalizeUint256(tokenId, 'Token ID');
   await requireSepolia(injected);
@@ -146,7 +146,7 @@ export async function signOnchainQR({ contract, eventId, tokenId, injected = glo
     };
     await requireSepolia(injected);
     const signature = await signer.signTypedData(qrDomain(config.contract), QR_TYPES, message);
-    // Jangan menampilkan hasil lama ketika akun, jaringan, atau pemilik berubah saat popup wallet terbuka.
+
     await requireSepolia(injected);
     const accounts = await injected.request({ method: 'eth_accounts' });
     if (!sameAddress(accounts?.[0], owner)) throw Error('Akun wallet berubah saat proses tanda tangan. Buat QR ulang.');
@@ -158,7 +158,7 @@ export async function signOnchainQR({ contract, eventId, tokenId, injected = glo
 }
 export async function verifyOnchainQR({ input, contract, eventId, tokenId, injected = globalThis.window?.ethereum }) {
   const config = normalizeChainConfig({ contract, eventId, tokenId }), payload = parseSignedQR(input);
-  // Tolak domain/token yang salah sebelum melakukan permintaan RPC.
+
   if (!sameAddress(payload.contract, config.contract) || normalizeUint256(payload.message.tokenId) !== config.tokenId || normalizeUint256(payload.message.eventId) !== config.eventId) {
     throw Error('Kontrak, token, atau event QR berbeda dari konfigurasi pemeriksaan.');
   }
@@ -166,7 +166,7 @@ export async function verifyOnchainQR({ input, contract, eventId, tokenId, injec
   const signer = validateSignedQR(payload, { ...config, owner: ticket.owner, now: Math.max(ticket.blockTimestamp, Math.floor(Date.now() / 1000)) });
   return { ...ticket, signer, eventId: config.eventId, expiresAt: payload.message.expiresAt };
 }
-// ABI aplikasi belum tersedia. Jangan kirim transaksi dengan fungsi kontrak yang ditebak.
+
 export async function submitOnchainTransaction() {
   throw Error('Integrasi transaksi belum aktif: membutuhkan alamat kontrak, ABI final, dan aturan check-in on-chain.');
 }

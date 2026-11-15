@@ -8,21 +8,21 @@ import {ITicketNFT} from "./ITicketNFT.sol";
 
 
 contract TicketNFT is ITicketNFT, ERC721, AccessControl, ReentrancyGuard {
-    /// Role allowed to create events
+
     bytes32 public constant ORGANIZER_ROLE = keccak256("ORGANIZER_ROLE");
-    /// Role of the marketplace contract (resale transfers and fees).
+
     bytes32 public constant MARKETPLACE_ROLE = keccak256("MARKETPLACE_ROLE");
 
-    ///100% in basis points.
+
     uint256 public constant BPS_DENOMINATOR = 10_000;
-    /// Lowest allowed resale cap (100% of the original price).
+
     uint16 public constant MIN_RESALE_CAP_BPS = 10_000;
-    /// Highest allowed resale cap (150% of the original price).
+
     uint16 public constant MAX_RESALE_CAP_BPS = 15_000;
- 
+
     uint32 public constant MAX_PER_WALLET = 10;
 
-    // Reason codes for InvalidEventParams.
+
     uint8 internal constant REASON_PRICE = 1;
     uint8 internal constant REASON_SUPPLY = 2;
     uint8 internal constant REASON_MAX_PER_WALLET = 3;
@@ -37,35 +37,35 @@ contract TicketNFT is ITicketNFT, ERC721, AccessControl, ReentrancyGuard {
     mapping(uint256 tokenId => TicketInfo) private _tickets;
     mapping(uint256 eventId => mapping(address account => bool)) private _gateCheckers;
     mapping(uint256 eventId => mapping(address buyer => uint256)) private _purchased;
-    ///  Primary sale escrow per event (refund source, withdrawn after eventTime).
+
     mapping(uint256 eventId => uint256) private _revenue;
     mapping(uint256 eventId => uint256) private _resaleFees;
     mapping(uint256 tokenId => uint256) private _reservedRefund;
 
 
-    /// Emitted when an organizer creates an event.
+
     event EventCreated(uint256 indexed eventId, address indexed organizer, EventParams params);
-    /// Emitted when the organizer updates an event. `params` holds all new values.
+
     event EventUpdated(uint256 indexed eventId, address indexed organizer, EventParams params);
-    /// Emitted when an event is canceled (soft delete).
+
     event EventCanceled(uint256 indexed eventId, address indexed by);
-    /// Emitted on primary sale. Token IDs are firstTokenId .. firstTokenId + quantity - 1.
+
     event TicketPurchased(
         uint256 indexed eventId, address indexed buyer, uint256 firstTokenId, uint256 quantity, uint256 totalPaid
     );
-    /// Emitted when a gate checker marks a ticket as used.
+
     event TicketCheckedIn(uint256 indexed tokenId, uint256 indexed eventId, address indexed checker, address holder);
-    /// Emitted when the organizer or admin revokes a ticket.
+
     event TicketRevoked(uint256 indexed tokenId, uint256 indexed eventId, address indexed by);
-    /// Emitted when a holder claims a refund (ticket is burned).
+
     event RefundClaimed(uint256 indexed tokenId, uint256 indexed eventId, address indexed holder, uint256 amount);
-    /// Emitted when a gate checker is assigned to an event.
+
     event GateCheckerAssigned(uint256 indexed eventId, address indexed checker, address indexed by);
-    /// Emitted when a gate checker is removed from an event.
+
     event GateCheckerRemoved(uint256 indexed eventId, address indexed checker, address indexed by);
-    /// Emitted when the organizer withdraws an event's balance.
+
     event RevenueWithdrawn(uint256 indexed eventId, address indexed organizer, uint256 amount);
-    /// Emitted when the marketplace sends a resale fee for an event.
+
     event ResaleFeeReceived(uint256 indexed eventId, address indexed marketplace, uint256 amount);
 
 
@@ -99,7 +99,7 @@ contract TicketNFT is ITicketNFT, ERC721, AccessControl, ReentrancyGuard {
     error ApprovalsDisabled();
 
 
-    /// admin Address that receives DEFAULT_ADMIN_ROLE 
+
     constructor(address admin) ERC721("anti-calo Ticket", "ACT") {
         if (admin == address(0)) revert ZeroAddress();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
@@ -119,12 +119,12 @@ contract TicketNFT is ITicketNFT, ERC721, AccessControl, ReentrancyGuard {
         emit EventCreated(eventId, msg.sender, p);
     }
 
-    /// Returns the core data of an event.
+
     function getEvent(uint256 eventId) external view returns (EventInfo memory) {
         return _requireEvent(eventId);
     }
 
-    /// Number of events created so far (valid IDs are 1..totalEvents()).
+
     function totalEvents() external view returns (uint256) {
         return _nextEventId - 1;
     }
@@ -157,7 +157,7 @@ contract TicketNFT is ITicketNFT, ERC721, AccessControl, ReentrancyGuard {
         emit EventCanceled(eventId, msg.sender);
     }
 
-   
+
     function buyTicket(uint256 eventId, uint256 qty) external payable nonReentrant {
         EventInfo storage ev = _requireEvent(eventId);
         if (ev.status != EventStatus.Active) revert EventNotActive(eventId);
@@ -170,7 +170,7 @@ contract TicketNFT is ITicketNFT, ERC721, AccessControl, ReentrancyGuard {
         uint256 cost = price * qty;
         if (msg.value != cost) revert IncorrectPayment(cost, msg.value);
 
-        // Effects. qty <= maxPerWallet <= MAX_PER_WALLET, so the uint32 cast cannot truncate.
+
         ev.sold += uint32(qty);
         _purchased[eventId][msg.sender] = bought;
         _revenue[eventId] += cost;
@@ -221,7 +221,7 @@ contract TicketNFT is ITicketNFT, ERC721, AccessControl, ReentrancyGuard {
         emit TicketRevoked(tokenId, eventId, msg.sender);
     }
 
-   
+
     function assignGateChecker(uint256 eventId, address checker) external {
         EventInfo storage ev = _requireEvent(eventId);
         _requireOrganizerOrAdmin(eventId, ev);
@@ -233,7 +233,7 @@ contract TicketNFT is ITicketNFT, ERC721, AccessControl, ReentrancyGuard {
         emit GateCheckerAssigned(eventId, checker, msg.sender);
     }
 
- 
+
     function removeGateChecker(uint256 eventId, address checker) external {
         EventInfo storage ev = _requireEvent(eventId);
         _requireOrganizerOrAdmin(eventId, ev);

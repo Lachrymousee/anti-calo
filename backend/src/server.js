@@ -11,7 +11,7 @@ const server = app.listen(config.port, () => {
   console.log(`[api] anti-calo backend di http://localhost:${config.port} (auth: ${config.authMode})`);
 });
 
-// Indexer ikut berjalan di proses yang sama bila RPC dan alamat kontrak diisi.
+
 let indexer;
 if (config.rpcUrl && config.ticketAddress && config.marketplaceAddress) {
   const provider = new JsonRpcProvider(config.rpcUrl, config.chainId, { staticNetwork: true });

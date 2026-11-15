@@ -15,7 +15,7 @@ export function buildInterfaces(config) {
   };
 }
 
-// Polling berulang dengan backoff saat RPC gagal. Mengembalikan { stop }.
+
 export function startIndexer({ db, provider, config, log = console }) {
   const interfaces = buildInterfaces(config);
   let stopped = false;

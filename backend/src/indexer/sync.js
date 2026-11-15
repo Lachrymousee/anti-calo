@@ -2,9 +2,9 @@ import { tx, getState, setState } from '../db.js';
 import { decodeLog } from './decode.js';
 import { insertAndProject, rewindTo } from './handlers.js';
 
-// Satu putaran sinkronisasi: baca log kontrak sampai (head - confirmations), terapkan per batch
-// dalam satu transaksi database bersama checkpoint (blok + hash).
-// interfaces: { [alamatKontrakHurufKecil]: ethers.Interface }
+
+
+
 export async function syncOnce({ db, provider, interfaces, config }) {
   const addresses = Object.keys(interfaces);
   const head = await provider.getBlockNumber();
@@ -17,7 +17,7 @@ export async function syncOnce({ db, provider, interfaces, config }) {
   if (savedHash && last >= 0) {
     const current = await provider.getBlock(last);
     if (!current || current.hash !== savedHash) {
-      // Hash blok checkpoint berubah: chain mengalami reorg. Mundur reorgDepth blok lalu baca ulang.
+
       const to = Math.max(startFloor, last - config.reorgDepth);
       const toBlock = to >= 0 ? await provider.getBlock(to) : null;
       rewound = rewindTo(db, to);
