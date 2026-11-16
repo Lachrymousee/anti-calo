@@ -14,56 +14,16 @@ Perlu Docker Desktop, Compose v2.24+, MetaMask di Sepolia, dan Sepolia ETH untuk
 git clone https://github.com/Lachrymousee/anti-calo.git
 cd anti-calo
 docker compose up --build -d
+docker compose logs -f
 ```
 
 - Mulai daftar / masuk wallet: <http://localhost:5173/anti-calo/account.html>
-- Event: <http://localhost:5173/anti-calo/>
-- Tiket saya: <http://localhost:5173/anti-calo/tickets.html>
-- Marketplace resale: <http://localhost:5173/anti-calo/marketplace.html>
-- Organizer: <http://localhost:5173/anti-calo/organizer.html>
-- Gate Checker: <http://localhost:5173/anti-calo/gate.html>
-- Admin: <http://localhost:5173/anti-calo/admin.html>
-- Lab Backend: <http://localhost:5173/anti-calo/backend.html>
-- API: <http://localhost:3001/api/health>
-- Status indexer: <http://localhost:3001/api/status>
 
-Mulai dari register/login; setelah berhasil pengguna masuk ke Event. Tanda tangan wallet membuktikan identitas tanpa password. Gunakan Logout di navbar untuk mengakhiri sesi. Admin default adalah deployer Sepolia `0xaE9F21b9D85978Fce4B7c64741aCE39BE36c27E0`. Ia dapat memberi role Organizer; Organizer/Admin dapat menugaskan Gate Checker pada event. Hak Admin hanya diberikan oleh role kontrak, bukan nama profil.
+Mulai dari register/login; setelah berhasil pengguna masuk ke Event. Tanda tangan wallet membuktikan identitas tanpa password. Gunakan Logout di navbar untuk mengakhiri sesi. Untuk kepentingan testing akun admin default adalah deployer Sepolia `0xaE9F21b9D85978Fce4B7c64741aCE39BE36c27E0`. Ia dapat memberi role Organizer; Organizer/Admin dapat menugaskan Gate Checker pada event. Hak Admin hanya diberikan oleh role kontrak.
 
+Untuk mengakhiri:
 ```powershell
-docker compose logs -f
 docker compose down
-```
-
-Database/poster bertahan pada volume Docker. `docker compose down -v` menghapusnya. Untuk RPC ber-API-key, salin `backend/.env.example` ke `backend/.env` dan ubah nilainya; jangan commit kredensial.
-
-## Menjalankan tanpa Docker
-
-Perlu Node.js 22.13+. Salin `.env.example` di root menjadi `.env`, lalu salin `backend/.env.example` menjadi `backend/.env`.
-
-Terminal backend:
-
-```powershell
-cd backend
-npm ci
-npm start
-```
-
-Terminal root repo:
-
-```powershell
-npm ci
-npm run dev
-```
-
-Buka <http://localhost:5173/anti-calo/>. Tanpa backend, halaman marketplace kembali ke demo browser.
-
-## Pengujian
-
-```powershell
-npm test
-npm run build
-cd backend; npm ci; npm test
-cd ..\blockchain; npm ci; npm test
 ```
 
 ## Fitur dan role
@@ -91,11 +51,8 @@ Tanpa backend, halaman utama lama tetap tersedia dalam mode demo browser.
 Chain ID `11155111`; deployment lengkap ada di [manifest](./shared/deployments/sepolia.json). RPC contoh: `https://sepolia.gateway.tenderly.co` (dapat terkena rate limit).
 
 ## Dokumentasi
-
-- [Deployment, Docker, Sepolia, dan Hardhat lokal](./docs/PANDUAN-DEPLOYMENT.md)
-- [Panduan frontend](./docs/PANDUAN-FRONTEND.md)
 - [Kontrak TicketNFT](./docs/contracts.md) · [Marketplace](./docs/contracts-marketplace.md)
-- [Keamanan](./docs/security.md) · [Backend/API](./backend/README.md)
+- [Keamanan](./docs/security.md) 
 
 ## Struktur
 
