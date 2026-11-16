@@ -16,14 +16,19 @@ function setup({ wallet = { address: BUYER, chainId: 31337 }, roles = role(), ev
   current?.page.cleanup(); current?.dom.window.close();
   const dom = new JSDOM('<!doctype html><div id="app"></div><div id="toasts"></div>', { url: 'https://example.test/backend.html' });
   Object.defineProperties(globalThis, { window: { value: dom.window, configurable: true }, document: { value: dom.window.document, configurable: true }, Node: { value: dom.window.Node, configurable: true } });
-  const calls = [], data = { events, tickets, listings }, counts = { events: 0 };
+  const calls = [], apiCalls = [], data = { events, tickets, listings }, counts = { events: 0 };
   const result = (n = 'ok') => ({ hash: `0x${n.padEnd(64, '0')}`, blockNumber: 101 });
   const chain = new Proxy({}, { get: (_, name) => name === 'then' ? undefined : chainImpl[name] ?? (async (...args) => { calls.push([name, ...args]); return result(name === 'createEvent' ? 'create' : 'ok'); }) });
-  const fake = { status: async () => status, config: async () => cfg, events: async () => { counts.events += 1; return data.events; }, listings: async () => data.listings, roles: async () => roles, tickets: async () => data.tickets };
+  const fake = { status: async () => status, config: async () => cfg, events: async () => { counts.events += 1; return data.events; }, listings: async () => data.listings, roles: async () => roles, tickets: async () => data.tickets,
+    hashFor: async (details) => { apiCalls.push(['hashFor', details]); return { detailsHash: `0x${'cd'.repeat(32)}` }; },
+    saveDetails: async (id, details, exists) => {
+      apiCalls.push(['saveDetails', id, details, exists]);
+      data.events = data.events.map((event) => event.id === id ? { ...event, ...details, detailsComplete: true, hashStatus: 'match', computedHash: `0x${'cd'.repeat(32)}` } : event);
+    } };
   const page = createBackendPage({ initialWallet: wallet, injected: { on() {}, removeListener() {}, request: async () => {} }, createClient: () => fake, makeOnchain: async () => chain, now: () => NOW,
     chain: { connectInjectedWallet: async () => wallet } });
   document.getElementById('app').append(page.main);
-  current = { dom, page, calls, data, counts };
+  current = { dom, page, calls, apiCalls, data, counts };
   return current;
 }
 const q = (id) => document.querySelector(`[data-testid="${id}"]`);
@@ -79,13 +84,35 @@ test('hanya satu transaksi pada satu waktu', async () => {
 test('organizer: panel buat event mengirim parameter yang benar lalu membuka editor detail', async () => {
   const s = setup({ wallet: { address: ORG, chainId: 31337 }, roles: role({ organizer: true }), events: [ev('1')],
     chainImpl: { createEvent: async (fields) => { s.calls.push(['createEvent', fields]); s.data.events = [...s.data.events, ev('2', { detailsComplete: false, hashStatus: 'missing', title: 'Event #2', computedHash: null })]; return { hash: '0xc', blockNumber: 101, eventId: '2' }; } } }); await sleep();
+  set('backend-new-title', 'Konser Baru'); set('backend-new-category', 'Musik'); set('backend-new-description', 'Deskripsi konser yang cukup panjang.'); set('backend-new-venue', 'Gedung Utama'); set('backend-new-city', 'Jakarta');
   set('backend-new-price', '0.02'); set('backend-new-supply', '50'); set('backend-new-perwallet', '2'); set('backend-new-cap', '120');
   set('backend-new-salestart', '2027-01-01T10:00'); set('backend-new-saleend', '2027-01-10T10:00'); set('backend-new-eventtime', '2027-01-11T10:00');
   await click('backend-create-submit'); await sleep(30);
   const [, f] = s.calls[0];
   assert.equal(f.priceEth, '0.02'); assert.equal(f.maxSupply, '50'); assert.equal(f.maxPerWallet, '2'); assert.equal(f.resaleCapBps, 12000);
   assert.equal(f.saleStart, Math.floor(new Date('2027-01-01T10:00').getTime() / 1000)); assert(f.saleEnd > f.saleStart && f.eventTime > f.saleEnd);
-  assert(q('backend-title'), 'editor detail event baru terbuka');
+  assert.equal(f.detailsHash, `0x${'cd'.repeat(32)}`);
+  assert.deepEqual(s.apiCalls, [
+    ['hashFor', { title: 'Konser Baru', category: 'Musik', description: 'Deskripsi konser yang cukup panjang.', location: 'Gedung Utama, Jakarta' }],
+    ['saveDetails', '2', { title: 'Konser Baru', category: 'Musik', description: 'Deskripsi konser yang cukup panjang.', location: 'Gedung Utama, Jakarta' }, false],
+  ]);
+  assert.equal(q('backend-title').value, 'Konser Baru');
+  assert.equal(q('backend-description').value, 'Deskripsi konser yang cukup panjang.');
+});
+
+test('organizer: menyimpan detail event saat indexer baru menyusul setelah transaksi', async () => {
+  const s = setup({ wallet: { address: ORG, chainId: 31337 }, roles: role({ organizer: true }), events: [ev('1')],
+    chainImpl: { createEvent: async () => ({ hash: '0xc', blockNumber: 101, eventId: '2' }) } }); await sleep();
+  set('backend-new-title', 'Konser Baru');
+  set('backend-new-description', 'Deskripsi konser yang cukup panjang.');
+  await click('backend-create-submit');
+  assert.equal(s.apiCalls.some(([name]) => name === 'saveDetails'), false);
+
+  s.data.events = [...s.data.events, ev('2', { title: 'Event #2', detailsComplete: false, hashStatus: 'missing', computedHash: null })];
+  await click('backend-refresh');
+  assert.deepEqual(s.apiCalls.find(([name]) => name === 'saveDetails'),
+    ['saveDetails', '2', { title: 'Konser Baru', category: 'Musik', description: 'Deskripsi konser yang cukup panjang.', location: '' }, false]);
+  assert.equal(q('backend-title').value, 'Konser Baru');
 });
 
 test('pembeli tidak melihat panel organizer, admin, atau Gate Checker', async () => {

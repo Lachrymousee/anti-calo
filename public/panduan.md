@@ -4,7 +4,7 @@ Marketplace tiket event berbasis Ethereum. `TicketNFT` mengelola event dan tiket
 
 ## Status
 
-Prototipe Sepolia, bukan layanan produksi. Marketplace/dashboard utama masih demo browser; transaksi nyata tersedia di **Lab Backend**. Check-in Lab Backend memakai ID tiket manual, bukan verifikasi QR on-chain.
+Prototipe Sepolia, bukan layanan produksi. Pengguna daftar/masuk dengan MetaMask sebelum membuka Event. Event menampilkan pembelian yang sedang dibuka dan event mendatang; Tiket saya menampilkan tiket wallet. Role dibaca dari kontrak. Logout tersedia di navbar. Tanpa `VITE_API_URL`, halaman lama berjalan sebagai demo browser.
 
 ## Menjalankan dengan Docker
 
@@ -16,11 +16,18 @@ cd anti-calo
 docker compose up --build -d
 ```
 
-- Aplikasi: <http://localhost:5173/anti-calo/backend.html>
+- Mulai daftar / masuk wallet: <http://localhost:5173/anti-calo/account.html>
+- Event: <http://localhost:5173/anti-calo/>
+- Tiket saya: <http://localhost:5173/anti-calo/tickets.html>
+- Marketplace resale: <http://localhost:5173/anti-calo/marketplace.html>
+- Organizer: <http://localhost:5173/anti-calo/organizer.html>
+- Gate Checker: <http://localhost:5173/anti-calo/gate.html>
+- Admin: <http://localhost:5173/anti-calo/admin.html>
+- Lab Backend: <http://localhost:5173/anti-calo/backend.html>
 - API: <http://localhost:3001/api/health>
 - Status indexer: <http://localhost:3001/api/status>
 
-Gunakan wallet dengan role yang sesuai; Admin memberi `ORGANIZER_ROLE` sebelum Organizer membuat event.
+Mulai dari register/login; setelah berhasil pengguna masuk ke Event. Tanda tangan wallet membuktikan identitas tanpa password. Gunakan Logout di navbar untuk mengakhiri sesi. Admin default adalah deployer Sepolia `0xaE9F21b9D85978Fce4B7c64741aCE39BE36c27E0`. Ia dapat memberi role Organizer; Organizer/Admin dapat menugaskan Gate Checker pada event. Hak Admin hanya diberikan oleh role kontrak, bukan nama profil.
 
 ```powershell
 docker compose logs -f
@@ -29,42 +36,50 @@ docker compose down
 
 Database/poster bertahan pada volume Docker. `docker compose down -v` menghapusnya. Untuk RPC ber-API-key, salin `backend/.env.example` ke `backend/.env` dan ubah nilainya; jangan commit kredensial.
 
-## Frontend demo tanpa Docker
+## Menjalankan tanpa Docker
 
-Perlu Node.js 22.13+:
+Perlu Node.js 22.13+. Salin `.env.example` di root menjadi `.env`, lalu salin `backend/.env.example` menjadi `backend/.env`.
+
+Terminal backend:
+
+```powershell
+cd backend
+npm ci
+npm start
+```
+
+Terminal root repo:
 
 ```powershell
 npm ci
 npm run dev
 ```
 
-Buka URL Vite, biasanya <http://localhost:5173>. Mode ini hanya menjalankan frontend demo, bukan integrasi Sepolia.
+Buka <http://localhost:5173/anti-calo/>. Tanpa backend, halaman marketplace kembali ke demo browser.
 
 ## Pengujian
 
-Jalankan di root:
-
 ```powershell
-npm ci
 npm test
 npm run build
+cd backend; npm ci; npm test
+cd ..\blockchain; npm ci; npm test
 ```
-
-Backend: `cd backend; npm ci; npm test`. Kontrak: `cd blockchain; npm ci; npm test`. Tes E2E lokal dan konfigurasi lengkap ada di [panduan deployment](./docs/PANDUAN-DEPLOYMENT.md).
 
 ## Fitur dan role
 
 | Area | Cakupan |
 | --- | --- |
-| Marketplace/tiket/dashboard/gate | Demo browser; data disimpan lokal. |
-| Lab Backend | Membaca indexer, kirim transaksi Sepolia, CRUD detail event off-chain. |
+| Register/login | Masuk dengan tanda tangan MetaMask; tidak ada halaman Akun terpisah setelah login. |
+| Event | Event aktif yang sedang dijual dan event mendatang; pembelian tiket on-chain. |
+| Marketplace | Beli listing resale atau jual tiket milik wallet. |
+| Organizer | Buat event dengan nama, kategori, deskripsi, lokasi, jadwal, dan harga; detail tersimpan di backend dengan hash on-chain. |
+| Gate Checker | Check-in tiket untuk event yang ditugaskan; ID tiket dimasukkan manual. |
+| Admin | Beri/cabut role Organizer, tugaskan checker, dan moderasi tiket sesuai kontrak. |
+| Tiket saya | Lihat status tiket, refund, dan kelola listing milik wallet. |
+| Lab Backend | Panel teknis untuk API/indexer dan operasi role on-chain. |
 | Lab Integrasi | Baca NFT dan uji signature EIP-712; bukan izin check-in. |
-| Buyer | Beli dan resale tiket. |
-| Organizer | Membuat event dan mengelola detail. |
-| Admin | Mengelola role dan moderasi sesuai kontrak. |
-| Gate Checker | Check-in event yang ditugaskan. |
-
-Alamat demo UI bukan wallet sungguhan dan tidak memiliki private key.
+Tanpa backend, halaman utama lama tetap tersedia dalam mode demo browser.
 
 ## Deployment Sepolia
 

@@ -1,6 +1,6 @@
 import { sameAddress } from './model.js';
 import { connectInjectedWallet } from './chain.js';
-import { API_URL, CATEGORIES, createApiClient, browserWallet, joinLocation, mapTicket } from './api.js';
+import { API_URL, CATEGORIES, createApiClient, browserWallet, joinLocation, splitLocation, mapTicket } from './api.js';
 import { createOnchain, signerFor, switchChain, waitForIndexer, explorerTxUrl } from './onchain.js';
 import { eventActions, ticketActions, listingActions, createEventPanel, gatePanel, adminPanel, proceedsPanel } from './backend-actions.js';
 import { el, icon, badge, button, link, field, shortAddress, toast, dateText, timeText, money, statusBadge } from './ui.js';
@@ -15,11 +15,11 @@ const HASH_BADGE = {
 
 
 export function createBackendPage({ initialWallet = null, onWalletConnected = () => {}, injected = globalThis.window?.ethereum,
-  baseUrl = API_URL, createClient, makeOnchain, chain = {}, now = () => Math.floor(Date.now() / 1000) } = {}) {
+  onRolesChanged = () => {}, baseUrl = API_URL, createClient, makeOnchain, chain = {}, mode = 'lab', now = () => Math.floor(Date.now() / 1000) } = {}) {
   const connect = chain.connectInjectedWallet ?? connectInjectedWallet;
   const makeClient = createClient ?? ((wallet) => createApiClient({ baseUrl, wallet: wallet ? browserWallet(injected, wallet.address) : null }));
-  let wallet = initialWallet, client = null, roles = null, events = [], tickets = [], listings = [], editing = null, disposed = false, epoch = 0;
-  let statusInfo = null, loadError = '', lastHash = null, cfg = null, txBusy = false, pendingEdit = null, txInfo = null;
+  let wallet = initialWallet, client = null, accountProfile = null, roles = null, events = [], tickets = [], listings = [], editing = null, disposed = false, epoch = 0;
+  let statusInfo = null, loadError = '', lastHash = null, cfg = null, txBusy = false, pendingEdit = null, pendingDetails = null, pendingEditDraft = null, txInfo = null;
 
   const status = el('div', { class: 'backend-status', 'data-testid': 'backend-status', role: 'status', 'aria-live': 'polite' });
   const walletBox = el('div', { class: 'backend-wallet', 'data-testid': 'backend-wallet' });
@@ -32,7 +32,7 @@ export function createBackendPage({ initialWallet = null, onWalletConnected = ()
   const txBox = el('div', { class: 'backend-tx', 'data-testid': 'backend-tx', role: 'status', 'aria-live': 'polite' });
 
   const fail = (e) => { error.textContent = e?.message ?? 'Tindakan belum berhasil.'; };
-  const canEdit = (ev) => Boolean(wallet && roles?.organizer && sameAddress(ev.organizer, wallet.address));
+  const canEdit = (ev) => Boolean(accountRegistered() && wallet && roles?.organizer && sameAddress(ev.organizer, wallet.address));
 
   async function refresh() {
     const mine = ++epoch;
@@ -40,19 +40,44 @@ export function createBackendPage({ initialWallet = null, onWalletConnected = ()
     try {
       client = makeClient(wallet);
       const [s, evs, ls, r, ts, c] = await Promise.all([
-        client.status(), client.events(), client.listings(),
+        client.status(), client.events(wallet && mode === 'organizer' ? { organizer: wallet.address, limit: 100 } : { limit: 100 }), client.listings(),
         wallet ? client.roles(wallet.address) : null, wallet ? client.tickets(wallet.address) : [],
         client.config ? client.config().catch(() => null) : null,
       ]);
       if (disposed || mine !== epoch) return;
       statusInfo = s; events = evs; listings = ls; roles = r; tickets = ts; cfg = c;
+      accountProfile = wallet && client.account
+        ? await client.account(wallet.address).catch((e) => { if (e.status === 404) return null; throw e; })
+        : null;
+      onRolesChanged(roles);
       if (pendingEdit && events.some((e) => e.id === pendingEdit)) { editing = pendingEdit; pendingEdit = null; }
     } catch (e) { if (disposed || mine !== epoch) return; statusInfo = null; loadError = e.message; }
     draw();
+    await savePendingDetails();
+  }
+
+  async function savePendingDetails() {
+    if (!pendingDetails || !events.some((ev) => ev.id === pendingDetails.id)) return;
+    const savedDetails = pendingDetails;
+    pendingDetails = null;
+    try {
+      await client.saveDetails(savedDetails.id, savedDetails.details, false);
+      pendingEditDraft = null;
+      setTx('Event dan detail berhasil disimpan.', txInfo?.hash);
+      toast('Detail event berhasil disimpan.');
+      await refresh();
+    } catch (e) {
+      pendingEditDraft = savedDetails;
+      error.textContent = `Event berhasil dibuat, tetapi detail belum tersimpan: ${e.message}`;
+      draw();
+    }
   }
 
   const chainOk = () => Boolean(wallet && cfg?.ticketAddress && cfg?.marketplaceAddress && Number(wallet.chainId) === Number(cfg.chainId));
-  const ctx = () => ({ wallet, roles, cfg, chainOk: chainOk(), now, run, sameAddress, created: (id) => { pendingEdit = id; } });
+  const accountRegistered = () => mode === 'lab' || !client?.account || Boolean(accountProfile);
+  const ctx = () => ({ wallet, roles, cfg, chainOk: chainOk(), accountRegistered: accountRegistered(), now, run, sameAddress,
+    hashFor: (details) => client.hashFor(details),
+    created: (id, details) => { pendingEdit = id; pendingDetails = details ? { id, details } : null; } });
 
   function setTx(message, hash) { txInfo = message ? { message, hash } : null; drawTx(); }
 
@@ -80,12 +105,40 @@ export function createBackendPage({ initialWallet = null, onWalletConnected = ()
   }
   function drawActions() {
     const c = ctx();
+    const registration = wallet && statusInfo && !c.accountRegistered
+      ? el('div', { class: 'notice', 'data-testid': 'backend-register-required' }, icon('info'),
+          el('span', {}, 'Daftar atau masuk dengan wallet untuk mengaktifkan tindakan akun.'),
+          link('Daftar / masuk', 'account.html', { kind: 'outline' }))
+      : null;
+    const needsRole = ['organizer', 'gate', 'admin'].includes(mode);
+    const roleMissing = wallet && c.accountRegistered && c.chainOk && needsRole
+      && (mode === 'organizer' && !roles?.organizer
+        || mode === 'gate' && !roles?.gateCheckerEventIds?.length
+        || mode === 'admin' && !roles?.admin);
+    const access = !wallet && needsRole
+      ? el('div', { class: 'notice' }, icon('info'), el('span', {}, 'Masuk dengan wallet yang memiliki akses untuk membuka halaman ini.'),
+          link('Masuk', 'account.html', { kind: 'outline' }))
+      : roleMissing
+        ? el('div', { class: 'notice' }, icon('info'), el('span', {}, mode === 'organizer'
+          ? 'Wallet ini belum memiliki role Organizer. Hubungi Admin.'
+          : mode === 'gate'
+            ? 'Wallet ini belum ditugaskan sebagai Gate Checker untuk event mana pun.'
+            : 'Halaman ini hanya tersedia untuk wallet Admin.'))
+        : null;
     const banner = !wallet || !statusInfo ? null
+      : !c.accountRegistered ? null
       : !cfg?.ticketAddress || !cfg?.marketplaceAddress ? el('div', { class: 'notice', 'data-testid': 'backend-network' }, icon('info'), el('span', {}, 'Alamat kontrak belum dikonfigurasi di backend, jadi transaksi dinonaktifkan.'))
       : !c.chainOk ? el('div', { class: 'notice', 'data-testid': 'backend-network' }, icon('info'), el('span', {}, `Wallet berada di jaringan lain. Transaksi memerlukan Chain ID ${cfg.chainId}.`),
           button('Ganti jaringan', async () => { await switchChain(cfg.chainId, injected); wallet = await connect(injected); onWalletConnected(wallet); await refresh(); }, { kind: 'outline', 'data-testid': 'backend-switch' }))
       : null;
-    actionsBox.replaceChildren(...[banner, createEventPanel(c), gatePanel(c, events), adminPanel(c), proceedsPanel(c)].filter(Boolean));
+    const panels = mode === 'events' ? []
+      : mode === 'marketplace' || mode === 'tickets' ? [proceedsPanel(c)]
+        : mode === 'organizer' ? [createEventPanel(c)]
+          : mode === 'gate' ? [gatePanel(c, events)]
+            : mode === 'admin' ? [adminPanel(c)]
+              : [createEventPanel(c), gatePanel(c, events), adminPanel(c), proceedsPanel(c)];
+    actionsBox.replaceChildren(...[registration, registration ? null : access, registration || access ? null : banner,
+      ...(registration || access ? [] : panels)].filter(Boolean));
   }
 
   function drawStatus() {
@@ -98,15 +151,38 @@ export function createBackendPage({ initialWallet = null, onWalletConnected = ()
   function drawWallet() {
     if (!wallet) { walletBox.replaceChildren(el('p', { class: 'muted' }, 'Hubungkan wallet untuk melihat tiket dan mengelola detail event.')); return; }
     walletBox.replaceChildren(el('code', {}, wallet.address),
+      accountProfile?.display_name ? el('strong', {}, accountProfile.display_name) : null,
       roles?.admin ? badge('Admin', 'purple') : null, roles?.organizer ? badge('Organizer', 'green') : null,
       roles?.gateCheckerEventIds?.length ? badge('Gate Checker', 'amber') : null,
       roles && !roles.admin && !roles.organizer && !roles.gateCheckerEventIds.length ? badge('Pembeli', 'neutral') : null);
   }
 
+  function eventContext() {
+    const c = ctx();
+    if (mode === 'events' || mode === 'gate') c.roles = null;
+    else if (mode === 'organizer') c.roles = { ...roles, admin: false };
+    else if (mode === 'admin') c.roles = { ...roles, organizer: false };
+    return c;
+  }
+
   function drawEvents() {
     if (!statusInfo) { eventsBox.replaceChildren(); return; }
-    if (!events.length) { eventsBox.replaceChildren(el('p', { class: 'muted', 'data-testid': 'backend-no-events' }, 'Belum ada event terindeks. Pastikan indexer berjalan dan START_BLOCK benar.')); return; }
-    eventsBox.replaceChildren(...events.map((ev) => {
+    const visible = mode === 'events'
+      ? events.filter((ev) => ev.status === 'live' && ev.eventTime > now())
+      : mode === 'gate'
+      ? roles ? events.filter((ev) => roles.gateCheckerEventIds?.includes(ev.id)) : []
+      : mode === 'organizer'
+        ? wallet && roles?.organizer ? events.filter((ev) => sameAddress(ev.organizer, wallet.address)) : []
+        : events;
+    if (!visible.length) {
+      const message = mode === 'organizer' && !roles?.organizer
+        ? 'Role Organizer tidak aktif. Event lama tetap mencatat alamat pembuatnya, tetapi tidak memberi akses Organizer.'
+        : mode === 'events'
+          ? 'Belum ada event aktif atau mendatang.'
+          : 'Belum ada event yang tersedia. Pastikan indexer berjalan, START_BLOCK benar, dan wallet memiliki akses yang sesuai.';
+      eventsBox.replaceChildren(el('p', { class: 'muted', 'data-testid': 'backend-no-events' }, message)); return;
+    }
+    eventsBox.replaceChildren(...visible.map((ev) => {
       const [hashText, hashKind] = HASH_BADGE[ev.hashStatus] ?? HASH_BADGE.missing;
       return el('article', { class: 'backend-event', 'data-testid': `backend-event-${ev.id}` },
         ev.posterUrl ? el('img', { src: ev.posterUrl, alt: `Poster ${ev.title}`, width: 120, height: 80, loading: 'lazy' }) : el('div', { class: 'backend-poster-empty' }, icon('ticket', 26)),
@@ -116,23 +192,25 @@ export function createBackendPage({ initialWallet = null, onWalletConnected = ()
           el('p', { class: 'field-hint' }, `Organizer ${shortAddress(ev.organizer)} · Event #${ev.id}`),
           badge(hashText, hashKind)),
         el('div', { class: 'backend-event-actions' },
-          canEdit(ev) ? button(ev.detailsComplete ? 'Edit detail' : 'Isi detail', () => { editing = ev.id; lastHash = null; error.textContent = ''; draw(); }, { kind: 'outline', iconName: 'book', 'data-testid': `backend-edit-${ev.id}` }) : null,
-          eventActions(ev, ctx())));
+          (mode === 'organizer' || mode === 'lab') && canEdit(ev) ? button(ev.detailsComplete ? 'Edit detail' : 'Isi detail', () => { editing = ev.id; lastHash = null; error.textContent = ''; draw(); }, { kind: 'outline', iconName: 'book', 'data-testid': `backend-edit-${ev.id}` }) : null,
+          mode === 'gate' ? null : eventActions(ev, eventContext())));
     }));
   }
 
   function drawEditor() {
     const ev = events.find((e) => e.id === editing);
     if (!ev) { editorBox.replaceChildren(); return; }
+    const draft = pendingEditDraft?.id === ev.id ? pendingEditDraft.details : null;
+    const draftLocation = splitLocation(draft?.location ?? '');
     const inputs = {
-      title: el('input', { value: ev.title.startsWith('Event #') ? '' : ev.title, maxlength: 120, 'data-testid': 'backend-title' }),
-      category: el('select', { 'data-testid': 'backend-category' }, ...CATEGORIES.map((c) => el('option', { value: c, selected: c === ev.category }, c))),
-      venue: el('input', { value: ev.venue, maxlength: 150, 'data-testid': 'backend-venue' }),
-      city: el('input', { value: ev.city, maxlength: 50, 'data-testid': 'backend-city' }),
-      description: el('textarea', { rows: 5, maxlength: 5000, 'data-testid': 'backend-description' }, ev.description),
+      title: el('input', { value: draft?.title ?? (ev.title.startsWith('Event #') ? '' : ev.title), maxlength: 120, 'data-testid': 'backend-title' }),
+      category: el('select', { 'data-testid': 'backend-category' }, ...CATEGORIES.map((c) => el('option', { value: c, selected: c === (draft?.category ?? ev.category) }, c))),
+      venue: el('input', { value: draftLocation.venue || ev.venue, maxlength: 150, 'data-testid': 'backend-venue' }),
+      city: el('input', { value: draftLocation.city || ev.city, maxlength: 50, 'data-testid': 'backend-city' }),
+      description: el('textarea', { rows: 5, maxlength: 5000, 'data-testid': 'backend-description' }, draft?.description ?? ev.description),
       poster: el('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', 'data-testid': 'backend-poster' }),
     };
-    inputs.category.value = CATEGORIES.includes(ev.category) ? ev.category : CATEGORIES[0];
+    inputs.category.value = CATEGORIES.includes(draft?.category ?? ev.category) ? (draft?.category ?? ev.category) : CATEGORIES[0];
     const hashBox = el('div', { class: 'backend-hash', 'data-testid': 'backend-hash' });
     const showHash = (d) => {
       hashBox.replaceChildren();
@@ -195,22 +273,40 @@ export function createBackendPage({ initialWallet = null, onWalletConnected = ()
   }, { kind: 'primary', iconName: 'wallet', 'data-testid': 'backend-connect' });
   const reloadBtn = button('Muat ulang', refresh, { kind: 'outline', iconName: 'refresh', 'data-testid': 'backend-refresh' });
 
-  const walletChanged = (accounts) => { if (disposed) return; wallet = accounts?.length ? { address: accounts[0], chainId: wallet?.chainId ?? 0 } : null; editing = null; lastHash = null; roles = null; tickets = []; onWalletConnected(wallet); refresh(); };
+  const walletChanged = (accounts) => { if (disposed) return; wallet = accounts?.length ? { address: accounts[0], chainId: wallet?.chainId ?? 0 } : null; editing = null; lastHash = null; roles = null; accountProfile = null; tickets = []; onWalletConnected(wallet); onRolesChanged(null); refresh(); };
   const chainChanged = (id) => { if (disposed || !wallet) return; wallet = { ...wallet, chainId: Number(id) }; onWalletConnected(wallet); draw(); };
   injected?.on?.('chainChanged', chainChanged);
   injected?.on?.('accountsChanged', walletChanged);
 
+  const headings = {
+    events: ['EVENT', 'Jelajahi event', 'Temukan event aktif dan beli tiket langsung dengan wallet Sepolia.'],
+    marketplace: ['MARKETPLACE', 'Jual dan beli tiket resale', 'Listing aktif berasal dari Marketplace on-chain. Pemilik tiket juga dapat membuat listing sesuai batas harga kontrak.'],
+    tickets: ['TIKET SAYA', 'Tiket milik wallet', 'Tiket dan statusnya dibaca dari blockchain melalui indexer.'],
+    organizer: ['ORGANIZER', 'Kelola event', 'Buat event on-chain, lengkapi detailnya, dan tugaskan Gate Checker.'],
+    gate: ['GATE CHECKER', 'Validasi tiket', 'Pilih event yang ditugaskan kepadamu dan check-in dengan ID tiket.'],
+    admin: ['ADMIN', 'Kelola akses dan moderasi', 'Berikan atau cabut role Organizer dan lakukan tindakan admin yang didukung kontrak.'],
+    lab: ['LAB BACKEND', 'Panel integrasi', 'Data event, tiket, dan listing dari indexer beserta panel tindakan berbasis role.'],
+  };
+  const [eyebrow, title, description] = headings[mode] ?? headings.lab;
   const main = el('main', { id: 'main', class: 'container integration-page backend-page' },
-    el('div', { class: 'page-top' }, el('div', {}, el('div', { class: 'eyebrow' }, 'LAB BACKEND'), el('h1', {}, 'Data event dari indexer, bukan data demo.'),
-      el('p', { class: 'muted' }, 'Halaman ini membaca event, tiket, dan listing resale dari backend yang mengindeks kontrak. Organizer dapat menyimpan detail dan poster off-chain.'))),
-    el('div', { class: 'notice integration-notice' }, icon('info'), el('span', {}, 'Halaman ini memakai wallet dan kontrak asli: pembelian, resale, check-in, dan penarikan dana dikirim sebagai transaksi. Halaman lain di website masih mode demo.')),
+    el('div', { class: 'page-top' }, el('div', {}, el('div', { class: 'eyebrow' }, eyebrow),
+      el('h1', {}, title), el('p', { class: 'muted' }, description))),
+    el('div', { class: 'notice integration-notice' }, icon('info'), el('span', {}, mode === 'lab'
+      ? 'Transaksi dikirim melalui wallet yang terhubung dan mengikuti role kontrak.'
+      : 'Data dibaca dari backend/indexer; setiap transaksi perlu konfirmasi MetaMask dan Sepolia ETH.')),
     el('section', { class: 'panel' }, el('div', { class: 'panel-heading' }, el('h2', {}, 'Koneksi'), el('div', { class: 'integration-actions' }, connectBtn, reloadBtn)), status, walletBox, error, txBox),
     actionsBox,
-    el('section', { class: 'panel' }, el('div', { class: 'panel-heading' }, el('h2', {}, 'Event on-chain')), eventsBox), editorBox,
-    el('div', { class: 'integration-columns' },
-      el('section', { class: 'panel' }, el('div', { class: 'panel-heading' }, el('h2', {}, 'Tiket di wallet ini')), ticketsBox),
-      el('section', { class: 'panel' }, el('div', { class: 'panel-heading' }, el('h2', {}, 'Resale yang dapat dibeli')), listingsBox)),
-    el('p', { class: 'field-hint' }, 'Sumber data: backend anti-calo. Lihat docs/PANDUAN-DEPLOYMENT.md untuk menjalankannya.', ' ', link('Panduan', 'guide.html', { kind: 'text' })));
+    mode === 'events' || mode === 'organizer' || mode === 'admin' || mode === 'gate' || mode === 'lab'
+      ? el('section', { id: 'events', class: 'panel' }, el('div', { class: 'panel-heading' }, el('h2', {}, mode === 'events' ? 'Event yang sedang dijual dan akan datang' : 'Event on-chain')), eventsBox)
+      : null,
+    editorBox,
+    mode === 'marketplace' || mode === 'tickets' || mode === 'lab'
+      ? el('section', { id: 'tickets', class: 'panel' }, el('div', { class: 'panel-heading' }, el('h2', {}, 'Tiket di wallet ini')), ticketsBox)
+      : null,
+    mode === 'marketplace' || mode === 'lab'
+      ? el('section', { id: 'listings', class: 'panel' }, el('div', { class: 'panel-heading' }, el('h2', {}, 'Listing aktif')), listingsBox)
+      : null,
+    el('p', { class: 'field-hint' }, 'Sumber data: backend anti-calo.'));
 
   draw(); refresh();
   return { main, cleanup() { disposed = true; injected?.removeListener?.('accountsChanged', walletChanged); injected?.removeListener?.('chainChanged', chainChanged); } };

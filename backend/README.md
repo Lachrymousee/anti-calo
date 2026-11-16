@@ -38,6 +38,8 @@ Semua respons JSON. Nilai uint256 dikirim sebagai string; alamat lowercase. Erro
 | Endpoint | Fungsi/akses |
 | --- | --- |
 | `GET /api/health`, `/api/status`, `/api/config`, `/api/categories` | Health, progres indexer, konfigurasi chain, kategori. |
+| `GET /api/auth/challenge/:address`, `POST /api/auth/login` | Tantangan sekali pakai dan login tanda tangan MetaMask. |
+| `GET /api/accounts/:address`, `PUT /api/accounts/:address` | Baca profil publik; pemilik wallet dapat membuat atau mengubah nama dengan signature. |
 | `GET /api/roles/:address` | Role, event milik, dan penugasan checker. |
 | `GET /api/events`, `/api/events/:id` | Daftar (filter `category`, `status`, `organizer`, `q`, `page`, `limit`) dan detail gabungan on/off-chain. |
 | `GET /api/events/:id/details` | Detail off-chain. |

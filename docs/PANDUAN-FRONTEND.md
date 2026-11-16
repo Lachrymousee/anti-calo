@@ -1,16 +1,20 @@
 # Panduan frontend
 
-Frontend multi-page Vite memakai HTML, CSS, dan JavaScript. Halaman utama menggunakan data demo browser; transaksi Sepolia tersedia terpisah di Lab Backend.
+Frontend multi-page Vite memakai HTML, CSS, dan JavaScript. Jika `VITE_API_URL` dikonfigurasi, halaman register/login, event, marketplace, tiket, serta halaman role memakai backend/indexer dan transaksi wallet Sepolia. Pengguna tanpa sesi diarahkan ke register/login; setelah berhasil login, pengguna masuk ke Event. Logout tersedia di navbar. Tanpa API, halaman lama kembali ke demo browser.
 
 ## Halaman
 
 | Halaman | Cakupan |
 | --- | --- |
-| Marketplace, Tiket saya | Jelajah event, tiket, QR, dan resale demo. |
-| Organizer, Admin | Pengelolaan event dan role demo. |
-| Gate Checker | Pemindaian QR demo; bukan check-in kontrak. |
-| Lab Backend | Data dari API/indexer dan transaksi TicketNFT/Marketplace di Sepolia. |
-| Lab Integrasi | Baca NFT dan uji signature EIP-712. |
+| Register/login | Daftar atau masuk dengan MetaMask signature; tidak ada halaman Akun terpisah setelah login. |
+| Event | Event aktif yang sedang dijual dan event mendatang; beli tiket primer jika penjualan dibuka. |
+| Marketplace | Beli listing resale atau list tiket milik wallet. |
+| Tiket saya | Kepemilikan, status, refund, dan listing wallet. |
+| Organizer | Membuat event dengan nama, kategori, deskripsi, lokasi, jadwal, dan aturan tiket. Detail teks disimpan di backend; hash-nya dicatat saat event dibuat on-chain. |
+| Admin | Mengelola role Organizer dan moderasi kontrak. |
+| Gate Checker | Check-in manual untuk event yang ditugaskan. |
+| Lab Backend | Panel teknis API/indexer dan operasi kontrak. |
+| Lab Integrasi | Baca NFT dan uji signature EIP-712; QR tidak menandai check-in on-chain. |
 
 ## Menjalankan
 
@@ -21,15 +25,15 @@ npm ci
 npm run dev
 ```
 
-Buka URL Vite yang ditampilkan. Build/test: `npm test`, `npm run build`, `npm run preview`. Edit `README.md` untuk mengubah halaman Docs; `npm run sync-docs` memperbarui salinan otomatis.
+Buka URL Vite yang ditampilkan. Mulai dari `account.html`; login berhasil mengarahkan ke Event (`index.html`). Navigasi menyediakan Event, Tiket saya, Marketplace resale, serta halaman role yang sesuai; pilih Logout di navbar untuk keluar. Build/test: `npm test`, `npm run build`, `npm run preview`. Edit `README.md` untuk mengubah halaman Docs; `npm run sync-docs` memperbarui salinan otomatis.
 
-Untuk Lab Backend tanpa Docker, isi `VITE_API_URL=http://localhost:3001` pada `.env` root, lalu jalankan backend/indexer sesuai [panduan deployment](./PANDUAN-DEPLOYMENT.md). Semua variabel `VITE_*` bersifat publik.
+Untuk integrasi tanpa Docker, salin `.env.example` menjadi `.env` di root, pastikan `VITE_API_URL=http://localhost:3001`, lalu jalankan backend/indexer sesuai [panduan deployment](./PANDUAN-DEPLOYMENT.md). Sesi membutuhkan login wallet terdaftar; halaman lain akan kembali ke register/login jika belum login. Semua variabel `VITE_*` bersifat publik.
 
 ## Data dan role demo
 
-Data aplikasi disimpan di `localStorage`, sesi akun di `sessionStorage`; keduanya hanya ada di browser dan dapat diubah pengguna. Akun demo bukan wallet sungguhan. Buyer dapat menjelajah, membeli, dan menjual tiket; Organizer mengelola event; Admin mengatur role/status; Gate Checker memeriksa event yang ditugaskan.
+Nama profil disimpan backend; login memakai tanda tangan wallet dan tidak menyimpan password/private key. Data on-chain menjadi sumber role dan kepemilikan.
 
-Role on-chain berbeda dari role demo. Lab Backend memakai role dan kepemilikan dari kontrak/indexer. Wallet yang melakukan transaksi harus berada di Sepolia dan memiliki saldo testnet.
+Admin Sepolia awal adalah deployer `0xaE9F21b9D85978Fce4B7c64741aCE39BE36c27E0`. Organizer/Admin dapat menetapkan Gate Checker untuk event. Wallet transaksi harus berada di Sepolia dan memiliki saldo testnet.
 
 ## QR
 

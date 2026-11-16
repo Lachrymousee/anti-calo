@@ -63,6 +63,7 @@ test('Tahap 2: beli, resale, check-in, refund, withdraw, dan role lewat transaks
 
 
   await rejects(chain('outsider').grantOrganizer(A.organizer), /role yang dibutuhkan/);
+  await rejects(chain('admin').revokeOrganizer(A.admin), /tidak memiliki role Organizer/);
   await settle(await chain('admin').grantOrganizer(A.organizer));
   assert.equal((await apiAs('admin').roles(A.organizer)).organizer, true);
   await rejects(chain('admin').grantOrganizer('bukan-alamat'), /alamat wallet yang valid/);
@@ -165,6 +166,7 @@ test('Tahap 2: beli, resale, check-in, refund, withdraw, dan role lewat transaks
 
   await settle(await chain('admin').revokeOrganizer(A.organizer));
   assert.equal((await apiAs('admin').roles(A.organizer)).organizer, false);
+  await rejects(chain('admin').revokeOrganizer(A.organizer), /tidak memiliki role Organizer/);
   await rejects(chain('organizer').createEvent(base), /role yang dibutuhkan/);
   assert.ok(ORGANIZER_ROLE.startsWith('0x'));
 });

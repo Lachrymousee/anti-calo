@@ -93,5 +93,4 @@ npm ci
 npm test
 npm run coverage
 ```
-
-Tes kontrak saat ini: 89 lulus. Risiko utama: satu admin terpusat, Marketplace ber-role dipercaya memindahkan tiket, checker dapat check-in kapan saja, pembatasan beli hanya per alamat, ETH refund tidak diklaim dapat tertahan, dan kontrak tidak upgradeable. Lihat [hasil Slither](./security.md) dan [dokumentasi Marketplace](./contracts-marketplace.md).
+k

@@ -1,6 +1,6 @@
 import { el, badge, button, field, money } from './ui.js';
 import { toUnix } from './onchain.js';
-import { weiToEth } from './api.js';
+import { CATEGORIES, weiToEth } from './api.js';
 
 
 
@@ -13,7 +13,7 @@ export function localInput(date) {
 }
 
 export function eventActions(ev, ctx) {
-  if (!ctx.wallet || !ctx.chainOk) return null;
+  if (!ctx.wallet || !ctx.chainOk || ctx.accountRegistered === false) return null;
   const t = ctx.now(), items = [];
   const saleOpen = ev.status === 'live' && t >= ev.saleStart && t <= ev.saleEnd && ev.sold < ev.capacity;
   if (saleOpen) {
@@ -21,6 +21,8 @@ export function eventActions(ev, ctx) {
       ...Array.from({ length: Math.min(ev.maxPerWallet, 10) }, (_, i) => el('option', { value: i + 1 }, `${i + 1} tiket`)));
     items.push(row(qty, button('Beli tiket', () => ctx.run('Pembelian tiket', (c) => c.buyTicket(ev.id, qty.value)), { kind: 'primary', 'data-testid': `backend-buy-${ev.id}` })));
   } else if (ev.status === 'live' && ev.sold >= ev.capacity) items.push(badge('Habis', 'amber'));
+  else if (ev.status === 'live' && t < ev.saleStart) items.push(badge('Segera dibuka', 'green'));
+  else if (ev.status === 'live' && t > ev.saleEnd) items.push(badge('Penjualan ditutup', 'amber'));
   const owner = ctx.roles?.organizer && ctx.sameAddress(ev.organizer, ctx.wallet.address);
   const live = ev.status === 'live' && t < ev.eventTime;
   if ((owner || ctx.roles?.admin) && live) items.push(button('Batalkan event', () => ctx.run('Pembatalan event', (c) => c.cancelEvent(ev.id)), { kind: 'outline', 'data-testid': `backend-cancel-${ev.id}` }));
@@ -39,7 +41,7 @@ export function eventActions(ev, ctx) {
 }
 
 export function ticketActions(ticket, ev, listing, ctx) {
-  if (!ctx.wallet || !ctx.chainOk) return null;
+  if (!ctx.wallet || !ctx.chainOk || ctx.accountRegistered === false) return null;
   const items = [];
   if (listing) items.push(button('Batalkan listing', () => ctx.run('Pembatalan listing', (c) => c.cancelListing(ticket.id)), { kind: 'outline', 'data-testid': `backend-unlist-${ticket.id}` }));
   else if (ticket.status === 'active' && ev?.status === 'live') {
@@ -55,14 +57,19 @@ export function ticketActions(ticket, ev, listing, ctx) {
 }
 
 export function listingActions(listing, ctx) {
-  if (!ctx.wallet || !ctx.chainOk || ctx.sameAddress(listing.seller, ctx.wallet.address)) return null;
+  if (!ctx.wallet || !ctx.chainOk || ctx.accountRegistered === false || ctx.sameAddress(listing.seller, ctx.wallet.address)) return null;
   return button('Beli', () => ctx.run('Pembelian resale', (c) => c.buyListing(listing.tokenId)), { kind: 'primary', 'data-testid': `backend-buylisting-${listing.tokenId}` });
 }
 
 export function createEventPanel(ctx) {
-  if (!ctx.wallet || !ctx.chainOk || !ctx.roles?.organizer) return null;
+  if (!ctx.wallet || !ctx.chainOk || ctx.accountRegistered === false || !ctx.roles?.organizer) return null;
   const d = (days) => localInput(new Date(Date.now() + days * 86_400_000));
   const f = {
+    title: el('input', { maxlength: 120, 'data-testid': 'backend-new-title' }),
+    category: el('select', { 'data-testid': 'backend-new-category' }, ...CATEGORIES.map((category) => el('option', { value: category }, category))),
+    description: el('textarea', { maxlength: 5000, rows: 4, 'data-testid': 'backend-new-description' }),
+    venue: el('input', { maxlength: 150, 'data-testid': 'backend-new-venue' }),
+    city: el('input', { maxlength: 50, 'data-testid': 'backend-new-city' }),
     priceEth: el('input', { value: '0.01', inputmode: 'decimal', 'data-testid': 'backend-new-price' }),
     maxSupply: el('input', { type: 'number', min: 1, value: 100, 'data-testid': 'backend-new-supply' }),
     maxPerWallet: el('input', { type: 'number', min: 1, max: 10, value: 4, 'data-testid': 'backend-new-perwallet' }),
@@ -73,20 +80,25 @@ export function createEventPanel(ctx) {
   };
   return el('section', { class: 'panel', 'data-testid': 'backend-create-panel' },
     el('div', { class: 'panel-heading' }, el('h2', {}, 'Buat event baru (on-chain)')),
-    el('div', { class: 'form-grid' }, field('Harga tiket (ETH)', f.priceEth), field('Kapasitas', f.maxSupply), field('Maks. per wallet (1–10)', f.maxPerWallet),
+    el('div', { class: 'form-grid' }, field('Nama event', f.title), field('Kategori', f.category),
+      field('Deskripsi', f.description, 'Minimal 10 karakter.'), field('Venue', f.venue), field('Kota', f.city),
+      field('Harga tiket (ETH)', f.priceEth), field('Kapasitas', f.maxSupply), field('Maks. per wallet (1–10)', f.maxPerWallet),
       field('Batas harga resale (%)', f.resalePercent, '100–150% dari harga awal.'), field('Penjualan mulai', f.saleStart), field('Penjualan selesai', f.saleEnd), field('Waktu event', f.eventTime)),
-    el('p', { class: 'field-hint' }, 'Setelah terkonfirmasi, isi detail event (judul, poster) lalu kunci hash-nya on-chain.'),
+    el('p', { class: 'field-hint' }, 'Nama, kategori, deskripsi, venue, dan kota disimpan sebagai detail event; jadwal dan aturan tiket dicatat di kontrak.'),
     button('Buat event', () => ctx.run('Pembuatan event', async (c) => {
+      const details = { title: f.title.value, category: f.category.value, description: f.description.value,
+        location: [f.venue.value, f.city.value].map((value) => value.trim()).filter(Boolean).join(', ') };
+      const { detailsHash } = await ctx.hashFor(details);
       const r = await c.createEvent({ priceEth: f.priceEth.value, maxSupply: f.maxSupply.value, maxPerWallet: f.maxPerWallet.value, saleStart: toUnix(f.saleStart.value),
-        saleEnd: toUnix(f.saleEnd.value), eventTime: toUnix(f.eventTime.value), resaleCapBps: Math.round(Number(f.resalePercent.value) * 100) });
-      ctx.created(r.eventId);
+        saleEnd: toUnix(f.saleEnd.value), eventTime: toUnix(f.eventTime.value), resaleCapBps: Math.round(Number(f.resalePercent.value) * 100), detailsHash });
+      ctx.created(r.eventId, details);
       return r;
     }), { kind: 'primary', iconName: 'plus', 'data-testid': 'backend-create-submit' }));
 }
 
 export function gatePanel(ctx, events) {
   const mine = new Set(ctx.roles?.gateCheckerEventIds ?? []);
-  if (!ctx.wallet || !ctx.chainOk || !mine.size) return null;
+  if (!ctx.wallet || !ctx.chainOk || ctx.accountRegistered === false || !mine.size) return null;
   const pick = el('select', { 'aria-label': 'Event', 'data-testid': 'backend-gate-event' }, ...events.filter((e) => mine.has(e.id)).map((e) => el('option', { value: e.id }, `#${e.id} · ${e.title}`)));
   const token = el('input', { inputmode: 'numeric', placeholder: 'ID tiket', 'data-testid': 'backend-gate-token' });
   return el('section', { class: 'panel', 'data-testid': 'backend-gate-panel' }, el('div', { class: 'panel-heading' }, el('h2', {}, 'Check-in (Gate Checker)')),
@@ -95,10 +107,11 @@ export function gatePanel(ctx, events) {
 }
 
 export function adminPanel(ctx) {
-  if (!ctx.wallet || !ctx.chainOk || !ctx.roles?.admin) return null;
+  if (!ctx.wallet || !ctx.chainOk || ctx.accountRegistered === false || !ctx.roles?.admin) return null;
   const who = el('input', { placeholder: '0x…', 'data-testid': 'backend-role-address' });
   const token = el('input', { inputmode: 'numeric', placeholder: 'ID tiket', 'data-testid': 'backend-revoke-token' });
   return el('section', { class: 'panel', 'data-testid': 'backend-admin-panel' }, el('div', { class: 'panel-heading' }, el('h2', {}, 'Admin')),
+    el('p', { class: 'field-hint' }, 'Kelola role Organizer, cabut tiket, dan tugaskan Gate Checker pada kartu event. Setiap perubahan dikirim ke kontrak.'),
     el('div', { class: 'form-grid' }, field('Alamat wallet', who)),
     row(button('Beri role Organizer', () => ctx.run('Pemberian role', (c) => c.grantOrganizer(who.value)), { kind: 'primary', 'data-testid': 'backend-grant' }),
       button('Cabut role Organizer', () => ctx.run('Pencabutan role', (c) => c.revokeOrganizer(who.value)), { kind: 'outline', 'data-testid': 'backend-revoke' })),
@@ -107,9 +120,8 @@ export function adminPanel(ctx) {
 }
 
 export function proceedsPanel(ctx) {
-  if (!ctx.wallet || !ctx.chainOk) return null;
+  if (!ctx.wallet || !ctx.chainOk || ctx.accountRegistered === false) return null;
   return el('section', { class: 'panel', 'data-testid': 'backend-proceeds-panel' }, el('div', { class: 'panel-heading' }, el('h2', {}, 'Hasil penjualan resale')),
     el('p', { class: 'field-hint' }, 'Hasil resale tiketmu dapat ditarik setelah pembeli membayar. Biaya organizer dipotong otomatis oleh kontrak.'),
     button('Tarik hasil resale', () => ctx.run('Penarikan hasil resale', (c) => c.withdrawProceeds()), { kind: 'outline', 'data-testid': 'backend-withdraw-proceeds' }));
 }
-

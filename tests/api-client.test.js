@@ -61,6 +61,26 @@ test('mode dev: memakai header x-wallet-address tanpa meminta tanda tangan', asy
   assert.equal(write.init.method, 'POST'); assert.equal(write.init.headers['x-wallet-address'], wallet.address); assert.equal(signed, 0);
 });
 
+test('login dan profil akun memakai endpoint terpisah; pendaftaran ditandatangani', async () => {
+  const wallet = Wallet.createRandom();
+  const { fetchImpl, calls } = fakeFetch((url) => {
+    if (url.endsWith('/api/status')) return { status: 200, body: { authMode: 'signature' } };
+    if (url.includes('/api/auth/challenge/')) return { status: 200, body: { message: 'login challenge' } };
+    return { status: 200, body: { address: wallet.address, display_name: 'Nadia', registered: true } };
+  });
+  const c = createApiClient({ baseUrl: BASE, fetchImpl, wallet, now: () => 1700000000 });
+  await c.loginChallenge(wallet.address);
+  await c.login(wallet.address, await wallet.signMessage('login challenge'));
+  await c.saveAccount(wallet.address, 'Nadia');
+  assert.equal(calls[0].url, `${BASE}/api/auth/challenge/${wallet.address}`);
+  assert.equal(calls[1].init.method, 'POST');
+  assert.deepEqual(JSON.parse(calls[1].init.body), { address: wallet.address, signature: await wallet.signMessage('login challenge') });
+  const update = calls.at(-1);
+  assert.equal(update.init.method, 'PUT');
+  assert.deepEqual(JSON.parse(update.init.body), { displayName: 'Nadia' });
+  assert.match(update.init.headers.authorization, /^AntiCalo /);
+});
+
 test('mode signature: tanda tangan memuat method, path, waktu, dan hash isi body', async () => {
   const wallet = Wallet.createRandom();
   const { fetchImpl, calls } = fakeFetch((url) => (url.endsWith('/api/status') ? { status: 200, body: { authMode: 'signature' } } : { status: 200, body: {} }));

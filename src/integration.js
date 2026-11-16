@@ -130,8 +130,8 @@ export function createIntegrationPage({ initialWallet = null, initialConfig, onW
   }
   injected?.on?.('accountsChanged', walletChanged); injected?.on?.('chainChanged', networkChanged);
   const main = el('main', { id: 'main', class: 'container integration-page' },
-    el('div', { class: 'page-top' }, el('div', {}, el('div', { class: 'eyebrow' }, 'LAB INTEGRASI BLOCKCHAIN'), el('h1', {}, 'Dari wallet ke bukti kepemilikan.'), el('p', { class: 'muted' }, 'Baca NFT pada Sepolia dan coba QR EIP-712 dengan tanda tangan pemilik.')), link('Kembali ke panduan', 'guide.html', { kind: 'outline', iconName: 'book' })),
-    el('div', { class: 'notice integration-notice' }, icon('info'), el('span', {}, 'Pembacaan NFT dan tanda tangan pada halaman ini menggunakan wallet asli di Sepolia. Pembelian serta check-in marketplace tetap dalam mode demo.')),
+    el('div', { class: 'page-top' }, el('div', {}, el('div', { class: 'eyebrow' }, 'LAB INTEGRASI BLOCKCHAIN'), el('h1', {}, 'Dari wallet ke bukti kepemilikan.'), el('p', { class: 'muted' }, 'Baca NFT pada Sepolia dan coba QR EIP-712 dengan tanda tangan pemilik.'))),
+    el('div', { class: 'notice integration-notice' }, icon('info'), el('span', {}, 'Pembacaan NFT dan tanda tangan pada halaman ini menggunakan wallet asli di Sepolia. Pembelian dan resale ada di halaman Event/Marketplace; Gate Checker menggunakan ID tiket manual.')),
     pending, el('div', { class: 'integration-columns' },
       el('div', {}, el('section', { class: 'panel integration-wallet-panel' }, el('div', { class: 'panel-heading' }, el('h2', {}, '1. Hubungkan wallet'), badge('Ethereum Sepolia', 'purple')), status, el('div', { class: 'integration-actions' }, connect, switchNetwork)),
         el('section', { class: 'panel' }, el('div', { class: 'panel-heading' }, el('h2', {}, '2. Tentukan NFT & event'), badge('Konfigurasi publik')),
@@ -146,7 +146,7 @@ export function createIntegrationPage({ initialWallet = null, initialConfig, onW
         el('section', { class: 'panel' }, el('h2', {}, '4. Periksa bukti QR'), el('p', { class: 'muted integration-intro' }, 'Tempel payload bertanda tangan dari pemilik. Pemeriksaan membaca ulang ownerOf pada Sepolia.'), payload,
           el('div', { class: 'integration-actions' }, verify, copy), verifyResult,
           el('p', { class: 'field-hint' }, 'Tanda tangan yang valid masih memerlukan transaksi check-in dari petugas berizin. Kontrak harus mencegah pemakaian ulang.')))),
-    el('section', { class: 'integration-next' }, el('span', { class: 'rule-icon' }, icon('shield', 25)), el('div', {}, el('h2', {}, 'Langkah berikutnya bersama tim kontrak'), el('p', {}, 'Hubungkan ABI marketplace untuk pembelian, resale, role, event, dan check-in atomik. QR dari lab ini tidak menandai tiket sebagai terpakai.'), link('Baca kebutuhan integrasi', 'docs.html#docs-yang-dibutuhkan-dari-tim-smart-contract', { kind: 'text', iconName: 'arrow' }))));
+    el('section', { class: 'integration-next' }, el('span', { class: 'rule-icon' }, icon('shield', 25)), el('div', {}, el('h2', {}, 'Batas verifikasi QR'), el('p', {}, 'Signature EIP-712 pada lab ini hanya diuji di browser dan tidak mengubah status tiket. Check-in kontrak tersedia di halaman Gate Checker dengan ID tiket manual.'))));
   update();
   return { main, cleanup: () => { disposed = true; epoch++; clearInterval(timer); injected?.removeListener?.('accountsChanged', walletChanged); injected?.removeListener?.('chainChanged', networkChanged); } };
 }

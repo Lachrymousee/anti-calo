@@ -27,8 +27,8 @@ import {
 import { connectInjectedWallet, switchToSepolia } from "./chain.js";
 import { createIntegrationPage } from "./integration.js";
 import { createBackendPage } from "./backend.js";
+import { createAccountPage } from "./account.js";
 import { hasApi } from "./api.js";
-import { createDocsPage } from "./docs.js";
 import {
   el,
   icon,
@@ -48,11 +48,22 @@ import {
 
 const store = new DemoStore();
 const page = document.body.dataset.page;
+const onchainModes = {
+  index: "events",
+  marketplace: "marketplace",
+  tickets: "tickets",
+  organizer: "organizer",
+  admin: "admin",
+  gate: "gate",
+};
+const onchainPage = hasApi() && (page === "account" || page === "backend" || Object.hasOwn(onchainModes, page));
 let session = "buyer";
 try {
   session = sessionStorage.getItem("tiketra-session") ?? "buyer";
 } catch {}
 let connectedWallet = null,
+  connectedRoles = null,
+  authenticatedAddress = null,
   cleanupPage = () => {},
   gateSelected = null,
   integrationDraft = null;
@@ -63,6 +74,16 @@ let category = "Semua",
   sort = "date",
   favoritesOnly = false,
   ticketFilter = "all";
+try {
+  const saved = JSON.parse(sessionStorage.getItem("anti-calo-wallet") ?? "null");
+  if (saved?.address && Number.isSafeInteger(Number(saved.chainId))) connectedWallet = saved;
+  connectedRoles = JSON.parse(sessionStorage.getItem("anti-calo-roles") ?? "null");
+  authenticatedAddress = sessionStorage.getItem("anti-calo-authenticated");
+} catch {}
+const isAuthenticated = () => Boolean(
+  connectedWallet?.address && authenticatedAddress
+  && sameAddress(connectedWallet.address, authenticatedAddress),
+);
 const artPath = (e) =>
   `${import.meta.env.BASE_URL}art/${
     [
@@ -198,14 +219,15 @@ function accountDialog() {
 async function connectWallet() {
   try {
     connectedWallet = await connectInjectedWallet();
+    try { sessionStorage.setItem("anti-calo-wallet", JSON.stringify(connectedWallet)); } catch {}
     render();
     toast(
       connectedWallet.chainId === CHAIN_ID
-        ? "MetaMask terhubung ke Sepolia. Website tetap dalam mode demo."
+        ? "Wallet terhubung ke Sepolia."
         : "Wallet terhubung. Jaringan belum Sepolia.",
       "success",
     );
-    if (page !== "integration" && page !== "backend") accountDialog();
+    if (!onchainPage && page !== "integration") accountDialog();
   } catch (err) {
     openModal(
       "Hubungkan wallet",
@@ -223,9 +245,13 @@ async function connectWallet() {
         el(
           "p",
           { class: "muted" },
-          "Koneksi hanya membaca alamat dan jaringan. Website ini belum mengirim transaksi blockchain.",
+          onchainPage
+            ? "Hubungkan wallet untuk masuk. Setiap transaksi tetap memerlukan persetujuan MetaMask."
+            : "Koneksi wallet pada halaman ini tidak mengubah akun demo.",
         ),
-        button("Gunakan akun demo", accountDialog, { kind: "primary" }),
+        onchainPage
+          ? link("Daftar atau masuk", "account.html", { kind: "primary" })
+          : button("Gunakan akun demo", accountDialog, { kind: "primary" }),
       ),
     );
   }
@@ -242,64 +268,102 @@ function header() {
       el(
         "nav",
         { "aria-label": "Navigasi utama", class: "top-nav" },
-        link("Jelajahi", "index.html", {
-          class: page === "index" ? "active" : "",
-        }),
-        link("Tiket saya", "tickets.html", {
-          class: page === "tickets" ? "active" : "",
-        }),
-        link("Cara kerja", "guide.html", {
-          class: page === "guide" ? "active" : "",
-        }),
-        hasApi()
-          ? link("Lab Backend", "backend.html", {
-              class: page === "backend" ? "active" : "",
-            })
-          : null,
+        onchainPage
+          ? isAuthenticated() ? [
+              link("Event", "index.html", { class: page === "index" ? "active" : "" }),
+              link("Marketplace", "marketplace.html", { class: page === "marketplace" ? "active" : "" }),
+              link("Tiket saya", "tickets.html", { class: page === "tickets" ? "active" : "" }),
+              connectedRoles?.organizer ? link("Organizer", "organizer.html", { class: page === "organizer" ? "active" : "" }) : null,
+              connectedRoles?.gateCheckerEventIds?.length ? link("Gate Checker", "gate.html", { class: page === "gate" ? "active" : "" }) : null,
+              connectedRoles?.admin ? link("Admin", "admin.html", { class: page === "admin" ? "active" : "" }) : null,
+            ] : []
+          : [
+              link("Jelajahi", "index.html", { class: page === "index" ? "active" : "" }),
+              link("Tiket saya", "tickets.html", { class: page === "tickets" ? "active" : "" }),
+              hasApi() ? link("Lab Backend", "backend.html", { class: page === "backend" ? "active" : "" }) : null,
+            ],
       ),
-      el(
-        "div",
-        { class: "header-actions" },
-        button(
-          connectedWallet
-            ? shortAddress(connectedWallet.address)
-            : "Hubungkan wallet",
-          connectWallet,
-          {
-            kind: "wallet",
-            iconName: "wallet",
-            "data-testid": "connect-wallet",
-          },
-        ),
-        button(
-          el(
-            "span",
-            {},
-            el(
-              "span",
-              { class: `avatar avatar-${session}` },
-              a.name.slice(0, 1),
+      onchainPage
+        ? isAuthenticated() ? el(
+            "div",
+            { class: "header-actions" },
+            button(connectedWallet ? shortAddress(connectedWallet.address) : "Masuk wallet", connectWallet,
+              { kind: "wallet", iconName: "wallet", "data-testid": "connect-wallet" }),
+            button("Logout", () => {
+              connectedWallet = null;
+              connectedRoles = null;
+              authenticatedAddress = null;
+              try {
+                sessionStorage.removeItem("anti-calo-wallet");
+                sessionStorage.removeItem("anti-calo-roles");
+                sessionStorage.removeItem("anti-calo-authenticated");
+              } catch {}
+              location.href = "account.html";
+            }, { kind: "text", "data-testid": "wallet-logout" }),
+          ) : null
+        : el(
+            "div",
+            { class: "header-actions" },
+            button(
+              connectedWallet
+                ? shortAddress(connectedWallet.address)
+                : "Hubungkan wallet",
+              connectWallet,
+              {
+                kind: "wallet",
+                iconName: "wallet",
+                "data-testid": "connect-wallet",
+              },
             ),
-            el(
-              "span",
-              { class: "account-label" },
-              a.name,
-              el("small", {}, roleName[a.role]),
+            button(
+              el(
+                "span",
+                {},
+                el(
+                  "span",
+                  { class: `avatar avatar-${session}` },
+                  a.name.slice(0, 1),
+                ),
+                el(
+                  "span",
+                  { class: "account-label" },
+                  a.name,
+                  el("small", {}, roleName[a.role]),
+                ),
+                icon("down", 15),
+              ),
+              accountDialog,
+              {
+                kind: "account-menu",
+                "aria-label": "Pilih akun demo",
+                "data-testid": "open-accounts",
+              },
             ),
-            icon("down", 15),
           ),
-          accountDialog,
-          {
-            kind: "account-menu",
-            "aria-label": "Pilih akun demo",
-            "data-testid": "open-accounts",
-          },
-        ),
-      ),
     ),
   );
 }
 function demoBanner() {
+  if (onchainPage)
+    return el(
+      "div",
+      { class: "demo-banner" },
+      el(
+        "div",
+        { class: "container demo-inner" },
+        el(
+          "span",
+          {},
+          el("span", { class: "status-dot" }),
+          "anti-calo · Sepolia",
+          el(
+            "span",
+            { class: "demo-detail" },
+            " · Data terindeks, akses berbasis role, transaksi lewat wallet",
+          ),
+        ),
+      ),
+    );
   if (page === "backend")
     return el(
       "div",
@@ -315,10 +379,9 @@ function demoBanner() {
           el(
             "span",
             { class: "demo-detail" },
-            " · Data dari indexer dan transaksi wallet asli; halaman lain masih demo",
+            " · Data indexer dan transaksi wallet Sepolia",
           ),
         ),
-        el("a", { href: "guide.html" }, "Batas integrasi", icon("arrow", 14)),
       ),
     );
   if (page === "integration")
@@ -339,7 +402,6 @@ function demoBanner() {
             " · Pembacaan NFT & signature menggunakan wallet asli",
           ),
         ),
-        el("a", { href: "guide.html" }, "Batas integrasi", icon("arrow", 14)),
       ),
     );
   return el(
@@ -359,7 +421,6 @@ function demoBanner() {
           " · Coba semua alur tanpa mengirim ETH",
         ),
       ),
-      el("a", { href: "guide.html" }, "Tentang demo", icon("arrow", 14)),
     ),
   );
 }
@@ -379,58 +440,85 @@ function footer() {
       el(
         "div",
         { class: "footer-links" },
-        link("Cara kerja", "guide.html"),
-        link("Dokumentasi", "docs.html"),
-        button(
-          "Reset demo",
-          () =>
-            openModal(
-              "Mulai demo dari awal?",
-              el(
-                "div",
-                {},
-                el(
-                  "p",
-                  {},
-                  "Tiket, event, role, dan check-in yang kamu ubah di browser ini akan dikembalikan ke data contoh.",
+        onchainPage
+          ? null
+          : button(
+              "Reset demo",
+              () =>
+                openModal(
+                  "Mulai demo dari awal?",
+                  el(
+                    "div",
+                    {},
+                    el(
+                      "p",
+                      {},
+                      "Tiket, event, role, dan check-in yang kamu ubah di browser ini akan dikembalikan ke data contoh.",
+                    ),
+                    button(
+                      "Reset data demo",
+                      () => {
+                        store.reset();
+                        session = "buyer";
+                        try {
+                          sessionStorage.setItem("tiketra-session", "buyer");
+                        } catch {}
+                        document.getElementById("modal").close();
+                        render();
+                        toast("Data demo dikembalikan.");
+                      },
+                      { kind: "danger", "data-testid": "confirm-reset" },
+                    ),
+                  ),
                 ),
-                button(
-                  "Reset data demo",
-                  () => {
-                    store.reset();
-                    session = "buyer";
-                    try {
-                      sessionStorage.setItem("tiketra-session", "buyer");
-                    } catch {}
-                    document.getElementById("modal").close();
-                    render();
-                    toast("Data demo dikembalikan.");
-                  },
-                  { kind: "danger", "data-testid": "confirm-reset" },
-                ),
-              ),
+              { kind: "text" },
             ),
-          { kind: "text" },
-        ),
       ),
       el("small", {}, `© ${new Date().getFullYear()} anti-calo.`),
     ),
   );
 }
 function render() {
+  if (onchainPage && page !== "account" && !isAuthenticated()) {
+    location.replace("account.html");
+    return;
+  }
   cleanupPage();
   cleanupPage = () => {};
   const app = document.getElementById("app");
   app.replaceChildren(header(), demoBanner());
   let content;
-  if (["organizer", "admin", "gate"].includes(page)) content = dashboard();
-  else if (page === "tickets") content = ticketsPage();
-  else if (page === "guide") content = guidePage();
-  else if (page === "docs") {
-    const docs = createDocsPage();
-    content = docs.main;
-    cleanupPage = docs.cleanup;
-  } else if (page === "integration") {
+  if (page === "account" && onchainPage) {
+    const accountPage = createAccountPage({
+      onWalletConnected: (wallet) => {
+        if (connectedWallet && !sameAddress(connectedWallet.address, wallet.address)) {
+          connectedRoles = null;
+          authenticatedAddress = null;
+          try {
+            sessionStorage.removeItem("anti-calo-roles");
+            sessionStorage.removeItem("anti-calo-authenticated");
+          } catch {}
+        }
+        connectedWallet = wallet;
+        document.querySelector(".site-header")?.replaceWith(header());
+      },
+      onLogin: (profile) => {
+        connectedRoles = profile;
+        authenticatedAddress = profile.address;
+        try { sessionStorage.setItem("anti-calo-roles", JSON.stringify(profile)); } catch {}
+        try { sessionStorage.setItem("anti-calo-authenticated", profile.address); } catch {}
+        location.href = "index.html";
+      },
+    });
+    content = accountPage.main;
+    cleanupPage = accountPage.cleanup;
+  } else if (page === "account") {
+    content = el('main', { id: 'main', class: 'container integration-page' },
+      el('section', { class: 'panel' }, el('h1', {}, 'Backend belum dikonfigurasi'),
+        el('p', { class: 'muted' }, 'Atur VITE_API_URL dan jalankan backend untuk mendaftar atau masuk dengan wallet.')));
+  } else if (["organizer", "admin", "gate"].includes(page) && !onchainPage) content = dashboard();
+  else if (page === "tickets" && !onchainPage) content = ticketsPage();
+  else if (page === "integration") {
     const lab = createIntegrationPage({
       initialWallet: connectedWallet,
       initialConfig: integrationDraft,
@@ -444,11 +532,24 @@ function render() {
     });
     content = lab.main;
     cleanupPage = lab.cleanup;
-  } else if (page === "backend") {
+  } else if (page === "backend" || onchainPage) {
     const lab = createBackendPage({
+      mode: page === "backend" ? "lab" : onchainModes[page],
       initialWallet: connectedWallet,
       onWalletConnected: (w) => {
         connectedWallet = w;
+        try {
+          if (w) sessionStorage.setItem("anti-calo-wallet", JSON.stringify(w));
+          else sessionStorage.removeItem("anti-calo-wallet");
+        } catch {}
+        document.querySelector(".site-header")?.replaceWith(header());
+      },
+      onRolesChanged: (roles) => {
+        connectedRoles = roles;
+        try {
+          if (roles) sessionStorage.setItem("anti-calo-roles", JSON.stringify(roles));
+          else sessionStorage.removeItem("anti-calo-roles");
+        } catch {}
         document.querySelector(".site-header")?.replaceWith(header());
       },
     });
@@ -456,6 +557,9 @@ function render() {
     cleanupPage = lab.cleanup;
   } else content = marketplace();
   app.append(content, footer());
+  if (onchainPage && page === "tickets") {
+    document.getElementById("tickets")?.scrollIntoView();
+  }
 }
 function stat(label, value, iconName, detail) {
   return el(
@@ -616,7 +720,6 @@ function marketplace() {
             kind: "primary",
             iconName: "arrow",
           }),
-          link("Kenali anti-calo", "guide.html", { kind: "outline" }),
         ),
         el(
           "div",
@@ -874,10 +977,6 @@ function marketplace() {
           {},
           "Mulai dari memilih event sampai scan di pintu masuk, coba seluruh perjalanan tiketmu di sini.",
         ),
-        link("Lihat cara kerja", "guide.html", {
-          kind: "dark",
-          iconName: "arrow",
-        }),
       ),
     ),
   );
@@ -1422,10 +1521,6 @@ function dashboard() {
       link("Jelajahi event", "index.html", {
         class: "sidebar-link",
         iconName: "search",
-      }),
-      link("Panduan", "guide.html", {
-        class: "sidebar-link",
-        iconName: "book",
       }),
       el(
         "div",
@@ -2635,6 +2730,26 @@ function manualLookup(eventId) {
   );
 }
 function guidePage() {
+  if (hasApi()) {
+    const steps = [
+      ["01", "Daftar atau masuk", "Hubungkan MetaMask di jaringan Sepolia. Tanda tangan login membuktikan wallet; tidak ada password yang disimpan.", "account.html"],
+      ["02", "Jelajahi event", "Lihat event dari indexer dan beli tiket on-chain dengan wallet yang terhubung.", "index.html"],
+      ["03", "Jual atau beli resale", "Beli listing aktif atau daftarkan tiket milikmu dari halaman Marketplace.", "marketplace.html"],
+      ["04", "Kelola role event", "Admin memberi role Organizer; Organizer/Admin dapat menugaskan Gate Checker pada event.", "account.html"],
+    ];
+    return el(
+      "main",
+      { id: "main", class: "container guide-page" },
+      el("div", { class: "guide-heading" }, el("div", { class: "eyebrow" }, "ALUR SEPOLIA"),
+        el("h1", {}, "Wallet, event, tiket."),
+        el("p", { class: "muted" }, "Mulai dari login wallet, lalu buka halaman sesuai kebutuhan dan role kontrak.")),
+      el("div", { class: "guide-steps" }, steps.map(([num, title, description, href]) =>
+        el("article", {}, el("div", { class: "step-top" }, el("span", {}, num)), el("h2", {}, title),
+          el("p", {}, description), link("Buka halaman", href, { kind: "text", iconName: "arrow" })))),
+      el("section", { class: "panel" }, el("h2", {}, "Admin default"),
+        el("p", {}, "Wallet deployer Sepolia 0xaE9F21b9D85978Fce4B7c64741aCE39BE36c27E0 memiliki role Admin pada deployment saat ini."),
+        el("p", { class: "field-hint" }, "Transaksi memakai Sepolia ETH. Gate Checker memvalidasi dengan ID tiket manual; QR belum dipakai untuk check-in on-chain.")));
+  }
   const steps = [
     [
       "buyer",
@@ -2755,7 +2870,6 @@ function guidePage() {
             kind: "primary",
             iconName: "wallet",
           }),
-          link("Buka Docs", "docs.html", { kind: "outline", iconName: "book" }),
         ),
       ),
     ),
@@ -2794,18 +2908,51 @@ if (window.ethereum?.on) {
       connectedWallet = accounts?.length
         ? { ...connectedWallet, address: accounts[0] }
         : null;
+      if (!connectedWallet || !sameAddress(authenticatedAddress ?? "", connectedWallet.address)) {
+        connectedRoles = null;
+        authenticatedAddress = null;
+      }
+      try {
+        if (connectedWallet) sessionStorage.setItem("anti-calo-wallet", JSON.stringify(connectedWallet));
+        else sessionStorage.removeItem("anti-calo-wallet");
+        if (!authenticatedAddress) {
+          sessionStorage.removeItem("anti-calo-roles");
+          sessionStorage.removeItem("anti-calo-authenticated");
+        }
+      } catch {}
       render();
     }
   });
   window.ethereum.on("chainChanged", (chainId) => {
     if (connectedWallet) {
       connectedWallet.chainId = Number(chainId);
+      try { sessionStorage.setItem("anti-calo-wallet", JSON.stringify(connectedWallet)); } catch {}
       render();
     }
   });
 }
 render();
-if (page === "index") {
+if (onchainPage && connectedWallet && window.ethereum?.request) {
+  window.ethereum.request({ method: "eth_accounts" }).then((accounts) => {
+    if (!accounts?.some((address) => sameAddress(address, connectedWallet.address))) {
+      connectedWallet = null;
+      connectedRoles = null;
+      authenticatedAddress = null;
+      try {
+        sessionStorage.removeItem("anti-calo-wallet");
+        sessionStorage.removeItem("anti-calo-roles");
+        sessionStorage.removeItem("anti-calo-authenticated");
+      } catch {}
+      render();
+      return;
+    }
+    return window.ethereum.request({ method: "eth_chainId" }).then((chainId) => {
+      connectedWallet.chainId = Number(chainId);
+      render();
+    });
+  }).catch((error) => toast(error.message ?? "Status wallet tidak dapat diperiksa.", "error"));
+}
+if (page === "index" && !onchainPage) {
   const id = new URLSearchParams(location.search).get("event");
   if (id && store.state.events.some((e) => e.id === id)) eventDetail(id);
 }

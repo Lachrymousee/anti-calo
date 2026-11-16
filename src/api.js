@@ -87,6 +87,10 @@ export function createApiClient({ baseUrl = API_URL, fetchImpl = (...a) => globa
   return {
     status: () => request('GET', '/api/status'),
     config: () => request('GET', '/api/config'),
+    loginChallenge: (address) => request('GET', `/api/auth/challenge/${address}`),
+    login: (address, signature) => request('POST', '/api/auth/login', { body: { address, signature } }),
+    account: (address) => request('GET', `/api/accounts/${address}`),
+    saveAccount: (address, displayName) => request('PUT', `/api/accounts/${address}`, { body: { displayName }, auth: true }),
     roles: (address) => request('GET', `/api/roles/${address}`),
     events: async (query = { limit: 100 }) => (await request('GET', '/api/events', { query })).items.map((e) => mapEvent(e, baseUrl)),
     tickets: async (owner) => (await request('GET', '/api/tickets', { query: { owner, limit: 100 } })).items,

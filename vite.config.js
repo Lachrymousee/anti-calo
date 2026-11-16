@@ -3,14 +3,14 @@ import { resolve } from "node:path";
 
 const pages = [
   "index",
+  "marketplace",
+  "account",
   "tickets",
   "organizer",
   "admin",
   "gate",
-  "guide",
   "integration",
   "backend",
-  "docs",
 ];
 
 export default defineConfig({

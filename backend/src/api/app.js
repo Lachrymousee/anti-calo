@@ -1,6 +1,7 @@
 import path from 'node:path';
+import crypto from 'node:crypto';
 import express from 'express';
-import { isAddress } from 'ethers';
+import { isAddress, verifyMessage } from 'ethers';
 import { HttpError, bad, conflict, notFound } from './errors.js';
 import { createAuth, requireWallet, isAdmin, isOrganizerRole, assertEventOrganizer, sha256Hex } from './auth.js';
 import { parseDetails, parseId, computeDetailsHash, hashStatus, CATEGORIES } from './validate.js';
@@ -19,6 +20,7 @@ const paging = (q) => {
 
 export function createApp({ db, config, now = () => Math.floor(Date.now() / 1000) }) {
   const app = express();
+  const loginChallenges = new Map();
   app.disable('x-powered-by');
 
   app.use((req, res, next) => {
@@ -78,6 +80,56 @@ export function createApp({ db, config, now = () => Math.floor(Date.now() / 1000
   });
 
   app.get('/api/categories', (_req, res) => res.json({ categories: CATEGORIES }));
+
+  app.get('/api/auth/challenge/:address', (req, res) => {
+    const address = lowAddr(req.params.address);
+    for (const [key, challenge] of loginChallenges) if (challenge.expiresAt <= now()) loginChallenges.delete(key);
+    if (!loginChallenges.has(address) && loginChallenges.size >= 10_000) {
+      throw new HttpError(503, 'Terlalu banyak permintaan login. Coba lagi sebentar.', 'unavailable');
+    }
+    const nonce = crypto.randomBytes(24).toString('hex');
+    const message = `anti-calo-login\naddress:${address}\nchain-id:${config.chainId}\nnonce:${nonce}`;
+    loginChallenges.set(address, { message, expiresAt: now() + config.authTtlSeconds });
+    res.json({ message, expiresAt: now() + config.authTtlSeconds });
+  });
+
+  app.post('/api/auth/login', (req, res) => {
+    const address = lowAddr(req.body?.address);
+    const challenge = loginChallenges.get(address);
+    loginChallenges.delete(address);
+    if (!challenge || challenge.expiresAt <= now()) throw new HttpError(401, 'Permintaan login kedaluwarsa. Coba lagi.', 'unauthorized');
+    let recovered;
+    try { recovered = verifyMessage(challenge.message, String(req.body?.signature ?? '')); }
+    catch { throw new HttpError(401, 'Tanda tangan login tidak valid.', 'unauthorized'); }
+    if (recovered.toLowerCase() !== address) throw new HttpError(401, 'Tanda tangan bukan milik wallet yang digunakan.', 'unauthorized');
+    const account = db.prepare('SELECT display_name FROM accounts WHERE address = ?').get(address);
+    const admin = isAdmin(db, address);
+    res.json({ address, registered: Boolean(account) || admin, displayName: account?.display_name ?? (admin ? 'Admin' : null),
+      admin, organizer: isOrganizerRole(db, address),
+      gateCheckerEventIds: db.prepare('SELECT event_id FROM gate_checkers WHERE checker = ? AND active = 1 ORDER BY CAST(event_id AS INTEGER)').all(address).map((r) => r.event_id) });
+  });
+
+  app.get('/api/accounts/:address', (req, res) => {
+    const address = lowAddr(req.params.address);
+    const account = db.prepare('SELECT address, display_name, created_at, updated_at FROM accounts WHERE address = ?').get(address);
+    if (!account && !isAdmin(db, address)) throw notFound('Akun belum terdaftar.');
+    res.json(account ?? { address, display_name: 'Admin', created_at: null, updated_at: null, system: true });
+  });
+
+  app.put('/api/accounts/:address', (req, res) => {
+    const wallet = requireWallet(req);
+    const address = lowAddr(req.params.address);
+    if (wallet !== address) throw new HttpError(403, 'Hanya pemilik wallet yang dapat mendaftarkan atau mengubah profil ini.', 'forbidden');
+    const displayName = String(req.body?.displayName ?? '').trim();
+    if (displayName.length < 2 || displayName.length > 40 || /[\u0000-\u001f\u007f]/.test(displayName)) {
+      throw bad('Nama akun harus berisi 2–40 karakter dan tidak boleh memuat karakter kontrol.');
+    }
+    const timestamp = new Date().toISOString();
+    db.prepare(`INSERT INTO accounts (address, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT(address) DO UPDATE SET display_name = excluded.display_name, updated_at = excluded.updated_at`)
+      .run(address, displayName, timestamp, timestamp);
+    res.json(db.prepare('SELECT address, display_name, created_at, updated_at FROM accounts WHERE address = ?').get(address));
+  });
 
   app.get('/api/roles/:address', (req, res) => {
     const a = lowAddr(req.params.address);

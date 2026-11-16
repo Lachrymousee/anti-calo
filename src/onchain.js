@@ -206,7 +206,12 @@ export function createOnchain({ signer, ticketAddress, marketplaceAddress, onSta
     withdrawProceeds: () => send(market, 'withdrawProceeds'),
     revokeTicket: (tokenId) => send(ticket, 'revokeTicket', [tokenArg(tokenId, 'ID tiket')]),
     grantOrganizer: (account) => send(ticket, 'grantRole', [ORGANIZER_ROLE, addr(account, 'Alamat organizer')]),
-    revokeOrganizer: (account) => send(ticket, 'revokeRole', [ORGANIZER_ROLE, addr(account, 'Alamat organizer')]),
+    async revokeOrganizer(account) {
+      const target = addr(account, 'Alamat organizer');
+      const active = await read(() => ticket.hasRole(ORGANIZER_ROLE, target));
+      if (!active) throw new OnchainError('Wallet ini tidak memiliki role Organizer; tidak ada role yang perlu dicabut.');
+      return send(ticket, 'revokeRole', [ORGANIZER_ROLE, target]);
+    },
     async balances(eventId, account) {
       const id = tokenArg(eventId, 'ID event');
       const [b, proceeds] = await read(() => Promise.all([ticket.eventBalances(id), account ? market.pendingProceeds(account) : 0n]));

@@ -51,6 +51,43 @@ test('GET event publik: data on-chain terindeks, detail off-chain null sebelum d
   assert.equal((await call(`${s.base}/api/events/abc`)).status, 400);
 });
 
+test('login wallet, registrasi profil, dan pengenalan Admin berasal dari role terindeks', async (t) => {
+  const s = await setup(); t.after(s.close);
+  const address = addr('admin');
+  const challenge = await call(`${s.base}/api/auth/challenge/${address}`);
+  assert.equal(challenge.status, 200);
+  const signature = await wallets.admin.signMessage(challenge.body.message);
+  const login = await call(`${s.base}/api/auth/login`, json(null, { address, signature }));
+  assert.equal(login.status, 200);
+  assert.equal(login.body.registered, true);
+  assert.equal(login.body.admin, true);
+  assert.equal(login.body.displayName, 'Admin');
+  assert.equal((await call(`${s.base}/api/auth/login`, json(null, { address, signature }))).status, 401);
+
+  const saved = await call(`${s.base}/api/accounts/${address}`, {
+    method: 'PUT', headers: { ...dev('admin'), 'content-type': 'application/json' },
+    body: JSON.stringify({ displayName: 'Admin anti-calo' }),
+  });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.display_name, 'Admin anti-calo');
+  assert.equal((await call(`${s.base}/api/accounts/${address}`, { ...json('buyer', { displayName: 'Ambil akun' }), method: 'PUT' })).status, 403);
+  assert.equal((await call(`${s.base}/api/accounts/${address}`)).body.display_name, 'Admin anti-calo');
+
+  const nextChallenge = await call(`${s.base}/api/auth/challenge/${address}`);
+  const nextSignature = await wallets.admin.signMessage(nextChallenge.body.message);
+  const loggedIn = await call(`${s.base}/api/auth/login`, json(null, { address, signature: nextSignature }));
+  assert.equal(loggedIn.body.registered, true);
+  assert.equal(loggedIn.body.displayName, 'Admin anti-calo');
+  assert.equal(loggedIn.body.admin, true);
+
+  const buyerAddress = addr('buyer');
+  const buyerChallenge = await call(`${s.base}/api/auth/challenge/${buyerAddress}`);
+  const buyerSignature = await wallets.buyer.signMessage(buyerChallenge.body.message);
+  const buyerLogin = await call(`${s.base}/api/auth/login`, json(null, { address: buyerAddress, signature: buyerSignature }));
+  assert.equal(buyerLogin.body.registered, false);
+  assert.equal(buyerLogin.body.admin, false);
+});
+
 test('CRUD detail event: izin per role, validasi, soft delete, buat ulang', async (t) => {
   const s = await setup(); t.after(s.close);
   const url = `${s.base}/api/events/1/details`;
@@ -186,6 +223,22 @@ test('AUTH_MODE=signature: tanda tangan valid, replay, body diganti, kedaluwarsa
   assert.equal((await call(`${s.base}/api/events/1/poster`, up2.init)).status, 401);
   const del = await signed(s, wallets.admin, 'DELETE', p);
   assert.equal((await call(`${s.base}${p}`, del.init)).status, 204);
+});
+
+test('registrasi profil pada Sepolia mewajibkan signature wallet pemilik', async (t) => {
+  const s = await setup({ authMode: 'signature' }); t.after(s.close);
+  const address = addr('buyer');
+  const challenge = await call(`${s.base}/api/auth/challenge/${address}`);
+  const signature = await wallets.buyer.signMessage(challenge.body.message);
+  assert.equal((await call(`${s.base}/api/auth/login`, json(null, { address, signature }))).status, 200);
+
+  const profilePath = `/api/accounts/${address}`;
+  const ownerRequest = await signed(s, wallets.buyer, 'PUT', profilePath, { body: { displayName: 'Pembeli' } });
+  assert.equal((await call(`${s.base}${profilePath}`, ownerRequest.init)).status, 200);
+
+  const otherRequest = await signed(s, wallets.organizer, 'PUT', profilePath, { body: { displayName: 'Penyusup' } });
+  assert.equal((await call(`${s.base}${profilePath}`, otherRequest.init)).status, 403);
+  assert.equal((await call(`${s.base}${profilePath}`)).body.display_name, 'Pembeli');
 });
 
 test('GET /api/config memberi chain dan alamat kontrak (tanpa rahasia)', async (t) => {

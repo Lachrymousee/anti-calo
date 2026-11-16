@@ -95,6 +95,13 @@ CREATE TABLE IF NOT EXISTS event_details (
   updated_at TEXT NOT NULL,
   deleted_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS accounts (
+  address TEXT PRIMARY KEY,
+  display_name TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 `;
 
 export function openDb(file = ':memory:') {

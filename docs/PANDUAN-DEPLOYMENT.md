@@ -13,12 +13,17 @@ Perlu Docker Desktop dengan Compose v2.24+, MetaMask di Sepolia, dan Sepolia ETH
    ```
 
 2. Periksa layanan:
-   - Frontend: <http://localhost:5173/anti-calo/backend.html>
+   - Register/login (halaman awal): <http://localhost:5173/anti-calo/account.html>
+   - Event (tujuan setelah login): <http://localhost:5173/anti-calo/>
+   - Tiket saya: <http://localhost:5173/anti-calo/tickets.html>
+   - Marketplace resale: <http://localhost:5173/anti-calo/marketplace.html>
+   - Tiket saya: <http://localhost:5173/anti-calo/tickets.html>
+   - Organizer / Gate Checker / Admin: `organizer.html`, `gate.html`, `admin.html`
    - API: <http://localhost:3001/api/health>
    - Indexer: <http://localhost:3001/api/status>
 
-   Tunggu `lastBlock` mendekati `headBlock`, lalu hubungkan MetaMask di Sepolia.
-3. Admin/deployer memberi `ORGANIZER_ROLE` melalui panel Admin sebelum Organizer membuat event.
+   Tunggu `lastBlock` mendekati `headBlock`, lalu daftar atau masuk dengan MetaMask di Sepolia. Setelah login, aplikasi membuka Event; gunakan Logout di navbar untuk keluar.
+3. Admin default adalah deployer `0xaE9F21b9D85978Fce4B7c64741aCE39BE36c27E0`. Masuk dengan wallet itu untuk memberi `ORGANIZER_ROLE`; Organizer/Admin dapat menugaskan Gate Checker pada event. Organizer mengisi nama, kategori, deskripsi, dan lokasi langsung di form buat event; backend menyimpan teks, sementara hash detail ikut dicatat on-chain.
 4. Log: `docker compose logs -f`. Berhenti: `docker compose down`.
 
 Database dan poster tersimpan pada volume `backend-data`; `down -v` menghapusnya. Default RPC/alamat ada di [backend/.env.example](../backend/.env.example) dan [manifest](../shared/deployments/sepolia.json). Untuk RPC ber-API-key, salin contoh menjadi `backend/.env`; jangan commit secret. Compose menjalankan frontend Vite, API, dan indexer, bukan node blockchain.
@@ -42,9 +47,9 @@ npm ci
 npm run dev
 ```
 
-Buka <http://localhost:5173/anti-calo/backend.html>, hubungkan wallet Sepolia, dan gunakan role yang sesuai. `GET /api/config` menampilkan Chain ID `11155111` beserta alamat kontrak. Transaksi memerlukan Sepolia ETH.
+Buka `account.html` untuk daftar/masuk dengan MetaMask. Jelajahi, pembelian, tiket wallet, serta resale memakai API/indexer dan kontrak yang sama. Role ditentukan kontrak, bukan profil. `GET /api/config` menampilkan Chain ID `11155111` beserta alamat kontrak. Transaksi memerlukan Sepolia ETH.
 
-Jangan jalankan `npm run seed:chain` di Sepolia; script itu hanya untuk Hardhat lokal dan menulis alamat lokal ke `backend/.env`. Halaman utama masih demo; QR Lab Integrasi belum dikonsumsi kontrak saat check-in.
+Jangan jalankan `npm run seed:chain` di Sepolia; script itu hanya untuk Hardhat lokal dan menulis alamat lokal ke `backend/.env`. Jika `VITE_API_URL` tidak diatur, halaman marketplace menggunakan demo browser. Check-in masih memakai ID tiket manual; QR Lab Integrasi belum dikonsumsi kontrak.
 
 ## Demo lokal dengan Hardhat
 
